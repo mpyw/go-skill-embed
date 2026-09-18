@@ -176,8 +176,8 @@ That is `examples/singlechecker` in this repository, run for real.
 > package. `-f` and `-force` are two flags on one variable, which is why they
 > print on two lines.
 >
-> The cobra and urfave/cli adapters print `--agent`, because that is what those
-> frameworks print.
+> The spf13/cobra and urfave/cli adapters print `--agent`, because that is
+> what those frameworks print.
 
 ### Naming the command in your own help
 
@@ -256,15 +256,16 @@ claimed, and `--force` remains the way through.
 ## Frameworks
 
 The core module has no dependencies beyond the standard library. Each adapter
-is a module of its own, so embedding skills never pulls cobra into your linter.
+is a module of its own, so embedding skills never pulls spf13/cobra into your
+linter.
 
 | Framework | Module | How |
 | --- | --- | --- |
 | stdlib `flag` | core | `skills.Intercept()` |
 | `singlechecker`, `multichecker`, `unitchecker` | core | `skills.Intercept()` |
-| cobra | `github.com/mpyw/go-skill-embed/skillcobra` | `root.AddCommand(skillcobra.Command(skills))` |
-| urfave/cli v3 | `github.com/mpyw/go-skill-embed/skillurfavev3` | `skillurfavev3.Command(skills)` |
-| urfave/cli v2 | `github.com/mpyw/go-skill-embed/skillurfavev2` | `skillurfavev2.Command(skills)` |
+| [spf13/cobra](https://github.com/spf13/cobra) | `github.com/mpyw/go-skill-embed/skillcobra` | `root.AddCommand(skillcobra.Command(skills))` |
+| [urfave/cli](https://github.com/urfave/cli) v3 | `github.com/mpyw/go-skill-embed/skillurfavev3` | `skillurfavev3.Command(skills)` |
+| [urfave/cli](https://github.com/urfave/cli) v2 | `github.com/mpyw/go-skill-embed/skillurfavev2` | `skillurfavev2.Command(skills)` |
 
 > [!IMPORTANT]
 > `Intercept` and the adapters take the first argument. Check that `skill` does
@@ -272,7 +273,7 @@ is a module of its own, so embedding skills never pulls cobra into your linter.
 >
 > | Your tool | Can `skill` already mean something else? |
 > | --- | --- |
-> | cobra or urfave/cli | No. The first argument is a subcommand |
+> | spf13/cobra or urfave/cli | No. The first argument is a subcommand |
 > | A `flag` tool with subcommands | No, for the same reason |
 > | A go/analysis driver | No. The first argument is a Go package pattern, and `skill` is not one |
 > | A tool that takes file names | **Yes**, if a file is called `skill` |
@@ -286,10 +287,10 @@ is a module of its own, so embedding skills never pulls cobra into your linter.
 
 > [!NOTE]
 > One thing the four front ends cannot agree on is a flag written after a
-> positional argument. `mytool skill install demo --dry-run` works under cobra
-> and urfave/cli v3. The `flag` package and urfave/cli v2 read it as a second
-> skill name. That is each framework's own parser, not this library. Writing
-> flags before names works everywhere.
+> positional argument. `mytool skill install demo --dry-run` works under
+> spf13/cobra and urfave/cli v3. The `flag` package and urfave/cli v2 read it
+> as a second skill name. That is each framework's own parser, not this
+> library. Writing flags before names works everywhere.
 
 ### stdlib flag
 
@@ -326,7 +327,7 @@ A `go vet -vettool=` run passes `-flags` or a config file path, so it is never
 affected. `examples/singlechecker` is a working driver that does this, with
 tests that run the real binary both ways.
 
-### cobra and urfave/cli
+### spf13/cobra and urfave/cli
 
 ```go
 root.AddCommand(skillcobra.Command(skills))

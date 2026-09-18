@@ -25,8 +25,8 @@ The front end follows from what the tool already is.
 | --- | --- |
 | A `flag` package tool | `Intercept` before `flag.Parse` |
 | A `go/analysis` driver | `Intercept` before `singlechecker.Main` |
-| A cobra tool | `skillcobra.Command` |
-| An urfave/cli tool | `skillurfavev3.Command` or `skillurfavev2.Command` |
+| A [spf13/cobra](https://github.com/spf13/cobra) tool | `skillcobra.Command` |
+| An [urfave/cli](https://github.com/urfave/cli) tool | `skillurfavev3.Command` or `skillurfavev2.Command` |
 | Something that parses its own arguments | `Run`, which returns errors instead of exiting |
 
 ## Wire it
