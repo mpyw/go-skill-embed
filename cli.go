@@ -189,7 +189,7 @@ func RenderCLIStatus(statuses []InstallStatus) string {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", st.Skill.Name, st.State, st.Path)
 	}
 	_ = tw.Flush()
-	return b.String()
+	return cliTrimLines(b.String())
 }
 
 // RenderCLIResults lists what install or uninstall did at each destination. The
@@ -209,7 +209,7 @@ func RenderCLIResults(results []InstallResult, dryRun bool) string {
 		_, _ = fmt.Fprintf(tw, "%s%s\t%s\t%s\n", prefix, r.Action, r.Skill.Name, r.Path+note)
 	}
 	_ = tw.Flush()
-	return b.String()
+	return cliTrimLines(b.String())
 }
 
 // renderCLIUsage is the help text. It mirrors the flags `gh skill install`
@@ -245,7 +245,18 @@ Embedded skills:
 		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", sk.Name, cliFirstLine(sk.Description))
 	}
 	_ = tw.Flush()
-	return b.String()
+	return cliTrimLines(b.String())
+}
+
+// cliTrimLines removes the padding a tabwriter leaves at the end of a line
+// when the last column is empty. Nothing should print trailing whitespace, and
+// an Output comment in an example cannot carry it either.
+func cliTrimLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func cliFirstLine(s string) string {

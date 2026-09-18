@@ -54,6 +54,11 @@ The `replace` directives in the adapter modules point at `../`. Go ignores a
 `replace` in a dependency, so consumers resolve the `require` line normally.
 They are there so the repository builds before a tag exists.
 
+`cliTrimLines` runs over every rendered block. A tabwriter pads the last
+column, so a skill with no description printed trailing spaces. Nothing should
+print those, and `gofmt` strips them from an `// Output:` comment, so an
+example could not assert the help text until they were gone.
+
 `_, _ = fmt.Fprintf(tw, ...)` appears only where the target is a `tabwriter`
 over an in-memory buffer. errcheck's default exclusions cover `bytes.Buffer`
 and `os.Stderr` but not `tabwriter`. The write that can actually fail is the

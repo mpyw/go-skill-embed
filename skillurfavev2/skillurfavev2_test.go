@@ -3,6 +3,7 @@ package skillurfavev2_test
 import (
 	"bytes"
 	"embed"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,10 +60,26 @@ func ExampleCommand() {
 
 	app := &cli.App{
 		Name:     "mytool",
+		Writer:   os.Stdout,
 		Commands: []*cli.Command{skillurfavev2.Command(skills)},
 	}
 
-	if err := app.Run(os.Args); err != nil {
-		os.Exit(1)
+	if err := app.Run([]string{"mytool", "skill", "install", "--help"}); err != nil {
+		log.Fatal(err)
 	}
+
+	// Output:
+	// NAME:
+	//    mytool skill install - Install the embedded skills
+	//
+	// USAGE:
+	//    mytool skill install [command options] [skill...]
+	//
+	// OPTIONS:
+	//    --agent value [ --agent value ]  Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all
+	//    --dir value                      Install to a custom directory (overrides --agent and --scope)
+	//    --scope value                    Installation scope: {project|user} (default: "project")
+	//    --force, -f                      Overwrite existing skills (default: false)
+	//    --dry-run                        Report what would happen without writing (default: false)
+	//    --help, -h                       show help
 }

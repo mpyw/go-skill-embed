@@ -3,6 +3,7 @@ package skillcobra_test
 import (
 	"bytes"
 	"embed"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,23 @@ func ExampleCommand() {
 	root := &cobra.Command{Use: "mytool"}
 	root.AddCommand(skillcobra.Command(skills))
 
+	root.SetOut(os.Stdout)
+	root.SetArgs([]string{"skill", "install", "--help"})
 	if err := root.Execute(); err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
+
+	// Output:
+	// Install the embedded skills
+	//
+	// Usage:
+	//   mytool skill install [skill...] [flags]
+	//
+	// Flags:
+	//       --agent strings   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all
+	//       --dir string      Install to a custom directory (overrides --agent and --scope)
+	//       --dry-run         Report what would happen without writing
+	//   -f, --force           Overwrite existing skills
+	//   -h, --help            help for install
+	//       --scope string    Installation scope: {project|user} (default "project")
 }

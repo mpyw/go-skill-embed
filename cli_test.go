@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -82,34 +81,5 @@ func TestInterceptHonoursTheCommandName(t *testing.T) {
 	}
 	if handled, _ := in.cliIntercept([]string{"mytool", "skills"}); !handled {
 		t.Error("the configured name was not intercepted")
-	}
-}
-
-// The help text is built by hand from several parts. A rename that reaches a
-// string literal shows up here and nowhere else.
-func TestUsage(t *testing.T) {
-	out := &bytes.Buffer{}
-	in := newCLIInstaller(t, WithOutput(out))
-
-	if err := in.Run(nil); err != ErrHelp {
-		t.Fatalf("Run(nil) = %v, want ErrHelp", err)
-	}
-	usage := out.String()
-
-	for _, want := range []string{
-		"Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity} (repeatable, or all)",
-		`--dir string     Install to a custom directory (overrides --agent and --scope)`,
-		`Installation scope: {project|user} (default "project")`,
-		"testtool skill install",
-		"demo-skill",
-	} {
-		if !strings.Contains(usage, want) {
-			t.Errorf("usage is missing %q:\n%s", want, usage)
-		}
-	}
-	for _, unwanted := range []string{"InstallTarget", "cliRepeatable", "InstallOptions"} {
-		if strings.Contains(usage, unwanted) {
-			t.Errorf("an identifier leaked into the usage text: %q\n%s", unwanted, usage)
-		}
 	}
 }

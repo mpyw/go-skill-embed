@@ -2,6 +2,7 @@ package skillembed_test
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -117,18 +118,35 @@ func ExampleInstaller_Intercept() {
 }
 
 // Run is for a tool that already parses its own arguments. It reports errors
-// instead of exiting, so the caller keeps control.
+// instead of exiting, so the caller keeps control, and asking for help is not
+// a failure.
 func ExampleInstaller_Run() {
 	skills := skillembed.NewInstaller(
 		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
 		skillembed.WithToolName("mytool"),
+		skillembed.WithOutput(os.Stdout),
 	)
 
-	if len(os.Args) > 1 && os.Args[1] == "skill" {
-		if err := skills.Run(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+	if err := skills.Run(nil); err != nil && !errors.Is(err, skillembed.ErrHelp) {
+		log.Fatal(err)
 	}
+
+	// Output:
+	// Manage the skills embedded in mytool.
+	//
+	// Usage:
+	//   mytool skill install   [flags] [skill...]
+	//   mytool skill uninstall [flags] [skill...]
+	//   mytool skill list      [flags] [skill...]
+	//
+	// Flags:
+	//       --agent string   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity} (repeatable, or all) (default "github-copilot")
+	//       --dir string     Install to a custom directory (overrides --agent and --scope)
+	//   -f, --force          Overwrite existing skills
+	//       --scope string   Installation scope: {project|user} (default "project")
+	//       --dry-run        Report what would happen without writing
+	//
+	// Embedded skills:
+	//   bare-skill
+	//   demo-skill  A skill used by this module's tests. It is not meant to be installed.
 }

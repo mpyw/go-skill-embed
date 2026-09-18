@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,10 +61,26 @@ func ExampleCommand() {
 
 	app := &cli.Command{
 		Name:     "mytool",
+		Writer:   os.Stdout,
 		Commands: []*cli.Command{skillurfavev3.Command(skills)},
 	}
 
-	if err := app.Run(context.Background(), os.Args); err != nil {
-		os.Exit(1)
+	if err := app.Run(context.Background(), []string{"mytool", "skill", "install", "--help"}); err != nil {
+		log.Fatal(err)
 	}
+
+	// Output:
+	// NAME:
+	//    mytool skill install - Install the embedded skills
+	//
+	// USAGE:
+	//    mytool skill install [options] [skill...]
+	//
+	// OPTIONS:
+	//    --agent string [ --agent string ]  Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all
+	//    --dir string                       Install to a custom directory (overrides --agent and --scope)
+	//    --scope string                     Installation scope: {project|user} (default: "project")
+	//    --force, -f                        Overwrite existing skills
+	//    --dry-run                          Report what would happen without writing
+	//    --help, -h                         show help
 }
