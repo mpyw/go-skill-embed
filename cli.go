@@ -154,6 +154,11 @@ func (s cliScope) String() string {
 }
 
 func (s cliScope) Set(v string) error {
+	// An empty value is a mistake, and Targets cannot tell it from a flag that
+	// was never given, so it is rejected here rather than taken as a default.
+	if v == "" {
+		return errors.New("scope must not be empty")
+	}
 	*s.dest = Scope(v)
 	return nil
 }

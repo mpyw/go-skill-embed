@@ -224,3 +224,18 @@ func TestSentinelsSurviveTheFrontEnd(t *testing.T) {
 		}
 	}
 }
+
+// An empty flag value is a mistake, not a default. Targets cannot tell it from
+// a flag that was never given, so the front end has to.
+func TestEmptyScopeIsRejected(t *testing.T) {
+	ctx := t.Context()
+	in := newCLIInstaller(t)
+
+	if err := in.Run(ctx, []string{"list", "--scope", "", "--dir", t.TempDir()}); err == nil {
+		t.Error("an empty --scope was accepted")
+	}
+	// A real value still reaches Targets, and its sentinel still survives.
+	if err := in.Run(ctx, []string{"list", "--scope", "bogus", "--dir", t.TempDir()}); !errors.Is(err, ErrUnknownScope) {
+		t.Errorf("err = %v, want it to wrap ErrUnknownScope", err)
+	}
+}

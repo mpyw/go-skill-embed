@@ -369,3 +369,68 @@ func TestExecutableBitsMatchFallsBackTheSameWay(t *testing.T) {
 		t.Errorf("a lost executable bit went unnoticed: ok=%v err=%v", ok, err)
 	}
 }
+
+// When the swap fails and the destination cannot be restored either, the tree
+// moved aside is the only copy left. Reaping it there is the whole loss, so it
+// is kept and the error names it.
+//
+// The window is reached by racing something that recreates the destination
+// between the two renames. The test skips when the race does not land, and
+// fails when the old tree is gone.
+func TestWriteKeepsTheOldTreeWhenTheRestoreFails(t *testing.T) {
+	const marker = "OLD-MARKER"
+
+	raced := false
+	for range 400 {
+		parent := t.TempDir()
+		dest := filepath.Join(parent, "demo")
+		if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dest, marker), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = os.MkdirAll(filepath.Join(dest, "junk"), 0o755)
+				}
+			}
+		}()
+
+		err := Write(t.Context(), demoFS(), dest, WriteOptions{})
+		close(stop)
+		<-done
+
+		if err == nil {
+			continue
+		}
+		raced = true
+		if !survives(t, parent, marker) {
+			t.Fatalf("the old tree was removed after a failed write: %v", err)
+		}
+	}
+	if !raced {
+		t.Skip("the race never landed, so nothing was proved")
+	}
+}
+
+// survives reports whether name is anywhere under dir.
+func survives(t *testing.T, dir, name string) bool {
+	t.Helper()
+	found := false
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.Name() == name {
+			found = true
+		}
+		return nil
+	})
+	return found
+}

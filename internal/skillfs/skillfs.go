@@ -189,11 +189,6 @@ func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 	if err := os.Remove(aside); err != nil {
 		return err
 	}
-	// Reaped whether the swap succeeded, failed, or never reached it. Removing
-	// a name that is not there returns nil, so one defer covers all three, and
-	// nothing is left behind for a later run to trip over.
-	defer func() { _ = os.RemoveAll(aside) }()
-
 	moved := false
 	if _, err := os.Lstat(dest); err == nil {
 		if err := os.Rename(dest, aside); err != nil {
@@ -206,12 +201,20 @@ func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 
 	if err := os.Rename(staging, dest); err != nil {
 		if moved {
-			// Put back what was there. The caller is no worse off than before.
-			_ = os.Rename(aside, dest)
+			if back := os.Rename(aside, dest); back != nil {
+				// dest holds neither tree, and the only copy of the old one is
+				// where it was moved to. It is kept and named, because
+				// removing it here would be the whole loss.
+				return fmt.Errorf("%w (the previous installation is at %s)", err, aside)
+			}
 		}
 		return err
 	}
-	// dest now holds the new tree. Nothing after this point can fail the write.
+
+	// dest holds the new tree, so the write has succeeded. Removing the one
+	// that was moved aside is cleanup, and a failure there is not a failed
+	// install.
+	_ = os.RemoveAll(aside)
 	return nil
 }
 

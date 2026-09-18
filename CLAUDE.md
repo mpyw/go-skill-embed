@@ -209,6 +209,19 @@ other project, and `~/.claude/skills` in particular is exactly where `--scope
 user` writes. Landing there is refused rather than allowed, because the
 alternative is a user-wide install that nothing announced.
 
+**Reaping the aside directory from a `defer`.** It looked like the one place
+that covers every path, and it covered one it should not have. When the swap
+fails and the restore fails too, the tree moved aside is the only copy left,
+and the `defer` removed it. Measured against the previous shape: 3893 failed
+writes, the old tree preserved in every one. The reap runs only after the swap
+succeeds now, and a failed restore keeps the directory and names it in the
+error.
+
+**Letting `cliScope.Set` store an empty value.** `Targets` reads an empty
+`Scope` as "use the default", so `--scope ""` was taken as a default rather
+than as the mistake it is. The front end rejects it, because it is the only
+place that knows the flag was given.
+
 ## Known and left alone
 
 An adversarial review raised these. They are recorded so the next reader does
@@ -222,7 +235,9 @@ and none of them corrupts anything they did not touch.
 | | |
 | --- | --- |
 | Concurrent installs into one directory | Six of eight raced runs fail on the rename. No corruption, and the last one wins |
-| A killed run leaves `.<name>.tmp-*` or `.<name>.old-*` behind | Nothing picks either up. The leading dot keeps them out of the agents' way |
+| A killed run leaves `.<name>.tmp-*` or `.<name>.old-*` behind | Nothing picks either up. The leading dot keeps them out of the agents' way. A failed restore leaves one on purpose, and names it |
+| `AgentSelectorFor` does not round trip a name holding a comma or spaces | Selectors are split on commas and trimmed. It needs a custom agent through `WithAgents` |
+| The adapters print no default for `--agent` | Each binds an empty slice, which cobra and urfave both read as "no default to show". The default used is the same in all four |
 | A `SKILL.md` that is a fifo or `/dev/zero` | `inspect` reads it without a size or type guard, so it hangs or grows without bound |
 | Extra `x-embedded-at` lines carry arbitrary text | `Strip` drops every injected key before hashing, so the digest cannot see them |
 | The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
