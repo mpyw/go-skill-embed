@@ -23,9 +23,8 @@ type Agent struct {
 	UserDir func() (string, error)
 }
 
-// Dir resolves the skills directory for the given scope.
-// projectRoot is only used for ScopeProject; an empty value means the
-// current working directory.
+// Dir resolves the skills directory for the given scope. projectRoot applies
+// to ScopeProject alone. An empty value means the working directory.
 func (a Agent) Dir(scope Scope, projectRoot string) (string, error) {
 	switch scope {
 	case ScopeProject:
@@ -64,7 +63,7 @@ func agentHomeDir(parts ...string) func() (string, error) {
 func agentEnvOrHomeDir(env string, envParts []string, homeParts ...string) func() (string, error) {
 	return func() (string, error) {
 		if root := strings.TrimSpace(os.Getenv(env)); root != "" {
-			// A config dir may hold several colon separated roots; use the first.
+			// A config dir may hold several colon separated roots. The first wins.
 			if i := strings.IndexByte(root, filepath.ListSeparator); i >= 0 {
 				root = root[:i]
 			}
@@ -127,9 +126,9 @@ func DefaultAgents() []Agent {
 // that writes its own flag help uses it to name the same agents.
 func (in *Installer) AgentChoices() string { return agentChoices(in.agents) }
 
-// agentsFallBackToAll is the answer when "detected" found nothing. A machine
-// with no agent directory is one where any guess is as good as another, and
-// doing nothing would read as a failure.
+// agentsFallBackToAll is the answer when "detected" found nothing. On a
+// machine with no agent directory any guess is as good as another, and writing
+// nothing would read as a failure.
 //
 //declscope:package // install.go applies it after resolving the agents
 func agentsFallBackToAll(known, resolved []Agent, values []string) []Agent {
@@ -165,7 +164,7 @@ var ErrNoAgentSelected = errors.New("skillembed: no agent selected")
 // agentsByName maps --agent values to agents.
 //
 // "all" expands to every agent the installer offers. "detected" keeps the ones
-// whose directory already exists, and expands to all when that finds nothing,
+// whose directory already exists. It expands to all when that finds nothing,
 // so the command still does something on a machine with no agent set up.
 //
 //declscope:package // the command line's agent vocabulary, read by install.go

@@ -1,13 +1,13 @@
 # go-skill-embed
 
-Ship agent skills inside your Go binary, and give it a `skill install` command.
+Ship agent skills inside a Go binary, and give that binary a `skill install`
+command.
 
 `gh skill install` fetches skills from a GitHub repository. This library does
-the same job from the other side. Your tool carries its own skills in an
-`embed.FS`, and writes them wherever the user's agent reads from.
-
-The flags match `gh skill install`, so a user who knows that command already
-knows yours.
+the same job from the other side. A tool carries its own skills in an
+`embed.FS`, and writes them wherever the user's agent reads from. The flags
+match `gh skill install`, so a user who knows that command already knows this
+one.
 
 ## Install
 
@@ -17,8 +17,8 @@ go get github.com/mpyw/go-skill-embed
 
 ## Quick start
 
-Put your skills under `skills/<name>/SKILL.md`. That is the layout defined by
-the [Agent Skills specification](https://agentskills.io/specification).
+Skills live under `skills/<name>/SKILL.md`. That is the layout defined by the
+[Agent Skills specification](https://agentskills.io/specification).
 
 ```go
 package main
@@ -55,14 +55,19 @@ func main() {
 > Write `all:` when a skill holds a file whose name starts with `.` or `_`.
 > Write the bare form otherwise.
 
-Either form is safe against the files an operating system leaves behind.
-`SkillsFromFS` refuses a skill holding `.DS_Store`, `Thumbs.db`, `desktop.ini`
-or `.localized`, and names the file. Those were committed, and they would ship
-to everyone.
+### Files an operating system leaves behind
 
-An installed skill is different. It sits in a directory a user may open in a
-file browser, so the same files are ignored there. A `.DS_Store` appearing
-beside an installed skill does not make it read as `modified`.
+`.DS_Store`, `Thumbs.db`, `desktop.ini` and `.localized` are handled from two
+directions, so either `//go:embed` form is safe.
+
+| Where the file is | What happens |
+| --- | --- |
+| Inside an embedded skill | `SkillsFromFS` refuses the skill and names the file |
+| Beside an installed skill | Ignored. The skill still reads as `up-to-date` |
+
+An embedded one was committed, and it ships to everyone. An installed skill
+sits in a directory a user may open in a file browser, where such a file
+appears on its own.
 
 ## Where skills go
 
@@ -92,14 +97,14 @@ still gets its skills. In a repository that already holds `.claude`, only
 Claude Code is written to. In a home directory it is the agents in use, rather
 than six directories of which most are litter.
 
+Claude Code moves its whole configuration with `CLAUDE_CONFIG_DIR`. User scope
+follows that variable when it is set.
+
 > [!NOTE]
 > `gh skill install` defaults to `github-copilot`, and prompts for the agent
 > when it can. A tool that embeds its skills is rarely able to prompt, and that
 > default writes only `.agents/skills`, which Claude Code does not read.
-> `WithDefaultAgents` changes this if you want the `gh` behaviour.
-
-Claude Code moves its whole configuration with `CLAUDE_CONFIG_DIR`. User scope
-follows that variable when it is set.
+> `WithDefaultAgents` restores the `gh` behaviour.
 
 ## The command
 
@@ -140,16 +145,18 @@ That is `examples/singlechecker` in this repository, run for real.
 > package. `-f` and `-force` are two flags on one variable, which is why they
 > print on two lines.
 >
-> The cobra and urfave/cli adapters print `--agent`, because that is what
-> those frameworks print.
+> The cobra and urfave/cli adapters print `--agent`, because that is what those
+> frameworks print.
+
+### Naming the command in your own help
 
 > [!WARNING]
 > Your tool's own help says nothing about the skill command. `Intercept` runs
 > before your flags are even defined, and it cannot reach `flag.Usage` or an
 > analyzer's `Doc`. Nobody finds the command unless you name it.
 
-`UsageHint` is that line. It tracks the command name and the skill count, so
-it cannot drift from what the command actually does.
+`UsageHint` is that line. It tracks the command name and the skill count, so it
+cannot drift from what the command actually does.
 
 ```go
 flag.Usage = func() {
@@ -228,6 +235,13 @@ is a module of its own, so embedding skills never pulls cobra into your linter.
 | urfave/cli v3 | `github.com/mpyw/go-skill-embed/skillurfavev3` | `skillurfavev3.Command(skills)` |
 | urfave/cli v2 | `github.com/mpyw/go-skill-embed/skillurfavev2` | `skillurfavev2.Command(skills)` |
 
+> [!NOTE]
+> One thing the four front ends cannot agree on is a flag written after a
+> positional argument. `mytool skill install demo --dry-run` works under cobra
+> and urfave/cli v3. The `flag` package and urfave/cli v2 read it as a second
+> skill name. That is each framework's own parser, not this library. Writing
+> flags before names works everywhere.
+
 ### stdlib flag
 
 `Intercept` goes before `flag.Parse`. The skill command is not a flag, so
@@ -268,20 +282,11 @@ tests that run the real binary both ways.
 > named `skill` is hidden by it. Write `./skill` instead, which the guard does
 > not match and every driver understands.
 
-> [!NOTE]
-> One thing the four front ends cannot agree on is a flag written after a
-> positional argument. `mytool skill install demo --dry-run` works under cobra
-> and urfave/cli v3, and is read as a second skill name by the `flag` package
-> and urfave/cli v2. That is each framework's own parser, not this library.
-> Writing flags before names works everywhere.
-
-### cobra
+### cobra and urfave/cli
 
 ```go
 root.AddCommand(skillcobra.Command(skills))
 ```
-
-### urfave/cli
 
 ```go
 app := &cli.Command{
@@ -303,7 +308,8 @@ app := &cli.Command{
 | `WithProjectRoot` | The working directory | What project scope resolves against |
 | `WithMetadata` | On | Writes the four `x-embedded-*` keys |
 | `WithExecutable` | Shebang test | Decides which files become executable |
-| `WithOutput` | `os.Stdout` | Where `Run` reports |
+| `WithOutput` | `os.Stdout` | Where `Run` writes the report and the help |
+| `WithErrorOutput` | `os.Stderr` | Where `Run` writes a complaint and the usage |
 
 > [!CAUTION]
 > `embed.FS` does not carry file modes. Every embedded file arrives read-only.
@@ -315,6 +321,10 @@ app := &cli.Command{
 
 `Run` never calls `os.Exit`, so a driver keeps control.
 
+`Status` reports without changing anything. `Install` and `Uninstall` return
+one `InstallResult` per skill per destination. All three take a context and
+stop between skills when it is cancelled.
+
 ```go
 results, err := skills.Install(ctx, skillembed.InstallOptions{
 	Agents: []string{"claude-code"},
@@ -322,9 +332,8 @@ results, err := skills.Install(ctx, skillembed.InstallOptions{
 })
 ```
 
-`Status` reports without changing anything. `Install` and `Uninstall` return
-one `InstallResult` per skill per destination. All three take a context and
-stop between skills when it is cancelled.
+`RenderCLIResults` and `RenderCLIStatus` turn those values into the text the
+built-in command prints. A front end that calls them reports the same way.
 
 Every error a user's own input can cause wraps a sentinel, so a front end can
 tell a mistyped flag from a disk that is full.
@@ -345,6 +354,9 @@ Tools are pinned in `mise.toml`.
 mise install
 ./test_all.sh
 ```
+
+`scripts/regolden.py` rewrites the help text that the examples assert. Run it
+after changing a flag or a default.
 
 Declaration scopes are enforced by [declscope](https://github.com/mpyw/declscope),
 at `qualify: ondemand` with `exported: true`. The settings are in

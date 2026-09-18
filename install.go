@@ -28,9 +28,9 @@ type Installer struct {
 	now          func() time.Time
 
 	// What the front end sees. cli.go, usage.go and agent.go read these to
-	// build help and to decide where to write, which is a crossing this module
-	// makes on purpose rather than one nobody noticed. The fields above are
-	// install.go's own, and declscope still says so if that changes.
+	// build help and to decide where to write. The fields above are
+	// install.go's own, and declscope reports it if one of them is read
+	// elsewhere.
 	//declscope:package
 	set *SkillSet
 	//declscope:package
@@ -74,14 +74,11 @@ func WithAgents(agents ...Agent) InstallerOption {
 // WithDefaultAgents sets the agents used when --agent is not given. It
 // defaults to "detected".
 //
-// `gh skill install` defaults to github-copilot, and prompts when it can. A
-// tool that embeds its skills is rarely in a position to prompt, and that
-// default writes only .agents/skills, which Claude Code does not read.
-//
 // "detected" keeps the agents whose directory is already there, and falls back
 // to "all" when it finds none. In a fresh repository that is two directories
 // and reaches everything. In a home directory it is the agents in use, rather
-// than six directories of which most are litter.
+// than six directories of which most are litter. Pass "github-copilot" for the
+// default `gh skill install` uses.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithDefaultAgents(names ...string) InstallerOption {
@@ -126,9 +123,8 @@ func WithOutput(w io.Writer) InstallerOption { return func(i *Installer) { i.out
 // flag or an unknown subcommand, and the usage that goes with it. It defaults
 // to os.Stderr.
 //
-// The two are separate so that `mytool skill list > skills.txt` puts the list
-// in the file and the complaint on the terminal, rather than the other way
-// round.
+// The two are separate for the sake of redirection. `mytool skill list >
+// skills.txt` puts the list in the file and the complaint on the terminal.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithErrorOutput(w io.Writer) InstallerOption { return func(i *Installer) { i.errOut = w } }
@@ -169,7 +165,7 @@ type InstallOptions struct {
 	Agents []string
 	// Scope is ScopeProject or ScopeUser. Empty means the installer default.
 	Scope Scope
-	// Dir installs into a directory of your choosing, overriding Agents and Scope.
+	// Dir installs into this directory, overriding Agents and Scope.
 	Dir string
 	// Force overwrites skills that were edited, or that something else installed.
 	Force bool
@@ -362,10 +358,9 @@ func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 	actual, err := skillfs.Digest(os.DirFS(dest))
 	if err != nil {
 		// Something there cannot be read or hashed, such as a symlink a user
-		// dropped in. We cannot say the copy is ours, so we say it is not, and
-		// --force stays the way out. Propagating the error instead would fail
-		// Status, and with it Install and Uninstall for every other skill at
-		// this target, leaving no way to repair the directory but rm -rf.
+		// dropped in. Nothing can be said about the copy, so it is not claimed
+		// as this tool's, and --force stays the way out. An error here would
+		// instead fail Status for every other skill at this target.
 		st.State = StateForeign
 		return st, nil
 	}
@@ -379,9 +374,9 @@ func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 	}
 
 	// The contents match. The executable bit is not in the digest, and a script
-	// that lost it cannot be run by the agent. It is outdated rather than
-	// modified: the user did not do this, so repairing it should not need
-	// --force.
+	// that lost it cannot be run by the agent. That reads as outdated rather
+	// than modified, because the user did not do it and repairing it should not
+	// need --force.
 	ok, err := skillfs.ExecutableBitsMatch(os.DirFS(dest), in.executable)
 	switch {
 	case err != nil:
@@ -412,8 +407,8 @@ type InstallResult struct {
 // A destination this tool did not write, or one edited after it did, is left
 // alone unless InstallOptions.Force is set. Those skills come back as
 // ActionSkipped with a Reason, exactly as Uninstall reports them, and the
-// error wraps ErrNeedsForce. One blocked destination therefore no longer stops
-// the others from being written.
+// error wraps ErrNeedsForce. One blocked destination does not stop the others
+// from being written.
 //
 // The results are meaningful even when the error is not nil. They describe
 // everything that happened before it.

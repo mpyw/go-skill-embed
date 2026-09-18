@@ -33,7 +33,7 @@ var junkNames = map[string]bool{
 // IsJunk reports whether p is one of those files.
 //
 // They are skipped on the way in and on the way out. An installed skill sits
-// in a directory a user may open in a file browser, and a .DS_Store appearing
+// in a directory a user may open in a file browser. A .DS_Store appearing
 // beside it is not the user editing the skill.
 func IsJunk(p string) bool { return junkNames[path.Base(p)] }
 
@@ -78,9 +78,9 @@ func Digest(fsys fs.FS) (string, error) {
 // the rule asks for.
 //
 // The digest cannot answer this. An embedded file has no mode at all, so the
-// two sides of a comparison would never agree on one. The rule reads the
-// contents instead, and contents the digest has already matched give the same
-// answer on either side.
+// two sides of a comparison never agree on one. The rule reads the contents
+// instead. The digest has already matched those contents, so both sides reach
+// the same answer.
 func ExecutableBitsMatch(fsys fs.FS, rule func(name string, data []byte) bool) (bool, error) {
 	if rule == nil {
 		return true, nil
@@ -118,10 +118,10 @@ type WriteOptions struct {
 
 // Write materialises src at dest, replacing whatever is there.
 //
-// The tree is staged in a sibling directory, and the swap is two renames with
-// the old directory moved aside in between. Removing the destination first
-// would not be atomic: a removal that failed half way left the old
-// installation destroyed and the new one unwritten.
+// The tree is staged in a sibling directory. The swap is two renames, with the
+// old directory moved aside in between and moved back if the second rename
+// fails. Removing the destination first is not atomic, so a failure part way
+// through would leave dest with no installation at all.
 func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 	executable := o.Executable
 	if executable == nil {

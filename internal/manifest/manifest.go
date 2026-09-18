@@ -1,8 +1,8 @@
 // Package manifest reads and rewrites the frontmatter of a SKILL.md.
 //
 // It deliberately does not parse YAML. The installer needs a handful of top
-// level scalars and needs to rewrite its own keys without disturbing anything
-// else, and a byte level edit preserves the rest of the file exactly.
+// level scalars, and it has to rewrite its own keys without disturbing
+// anything else. A byte level edit preserves the rest of the file exactly.
 package manifest
 
 import (
@@ -178,8 +178,8 @@ func With(src []byte, entries []Entry) []byte {
 // That second step is why it is not just Strip. With writes a block when the
 // source had none, and Strip alone cannot tell that block from one the source
 // already had. Removing an empty block on both sides makes the two spellings
-// of "no frontmatter" hash alike, so a skill whose manifest carries an empty
-// block no longer reads as modified the moment it is installed.
+// of "no frontmatter" hash alike. A skill whose manifest carries an empty
+// block therefore reads as up-to-date once installed.
 func Normalize(src []byte) []byte {
 	src = Strip(src)
 	b := locate(src)
@@ -224,9 +224,9 @@ func Strip(src []byte) []byte {
 
 func isInjected(line []byte) bool {
 	text := strings.TrimRight(string(line), " \t\r")
-	// An indented line belongs to whatever is above it, which may be a block
+	// An indented line belongs to whatever is above it. That may be a block
 	// scalar holding a line that looks exactly like one of these keys. Fields
-	// skips those; this has to skip them for the same reason.
+	// skips those, and this has to skip them for the same reason.
 	if text == "" || text[0] == ' ' || text[0] == '\t' {
 		return false
 	}

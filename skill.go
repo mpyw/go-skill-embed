@@ -153,8 +153,8 @@ func SkillsFromFS(fsys fs.FS, root string) (*SkillSet, error) {
 	return &SkillSet{skills: skills}, nil
 }
 
-// MustSkillsFromFS is SkillsFromFS for a package level variable. It panics, which is what
-// you want: a broken embed is a build-time mistake, not a runtime condition.
+// MustSkillsFromFS is SkillsFromFS for a package level variable. It panics,
+// because a broken embed is a build-time mistake and not a runtime condition.
 func MustSkillsFromFS(fsys fs.FS, root string) *SkillSet {
 	set, err := SkillsFromFS(fsys, root)
 	if err != nil {

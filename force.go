@@ -14,7 +14,7 @@ func (s State) NeedsForce() bool { return s == StateModified || s == StateForeig
 // write, or something edited after it did. Install leaves those skills alone
 // and reports the rest, so a caller branches on this rather than on the text:
 //
-//	results, err := skills.Install(o)
+//	results, err := skills.Install(ctx, o)
 //	printed(results)
 //	if errors.Is(err, skillembed.ErrNeedsForce) {
 //		// tell the user to re-run with --force

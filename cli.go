@@ -58,15 +58,13 @@ func (in *Installer) Run(ctx context.Context, args []string) error {
 //	}
 //
 // The guard is the first argument and nothing else. `mytool skill install`
-// reaches it. `mytool -v skill install` does not, because the first argument
-// is a flag, and the skill command is not something a user reaches after one.
-// It also means a `go vet -vettool=` invocation is never affected, since those
-// pass -flags or a config file path.
+// reaches it. `mytool -v skill install` does not. A `go vet -vettool=`
+// invocation passes -flags or a config file path, so it is never affected.
 //
-// A go/analysis driver leaves no later point at which a subcommand could still
-// be recognised. singlechecker, unitchecker and multichecker all read every
-// non-flag argument as a package pattern, so running before them is the only
-// option rather than the tidy one.
+// singlechecker, unitchecker and multichecker read every non-flag argument as
+// a package pattern, and they parse the command line themselves. No later
+// point exists at which a subcommand could still be recognised, so Intercept
+// has to run before them.
 //
 //declscope:ignore qualify // written by hand in the user's main, where CliIntercept would read worse
 func (in *Installer) Intercept() {
@@ -95,7 +93,7 @@ func (in *Installer) cliIntercept(ctx context.Context, argv []string) (handled b
 
 // cliRepeatable is a flag that may be given more than once, and that also
 // accepts a comma separated list. It appends straight into the options, so no
-// caller has to carry one around.
+// caller has to hold an intermediate slice.
 type cliRepeatable struct{ dest *[]string }
 
 // String is called on a zero value to decide whether a default is worth
@@ -197,9 +195,8 @@ func (in *Installer) cliInstall(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Report first. Install and Uninstall describe everything they did before
-	// the error, and a run that wrote three skills and refused a fourth should
-	// say so.
+	// Report first. Install describes everything it did before the error, and a
+	// run that wrote three skills and refused a fourth has to say so.
 	results, runErr := in.Install(ctx, o)
 	if _, err := io.WriteString(in.cliOut(), RenderCLIResults(results, o.DryRun)); err != nil {
 		return err

@@ -62,9 +62,9 @@ func (in *Installer) usageHeadings(sub string) (summary, lines string) {
 // sub is empty.
 //
 // The flag block comes from the FlagSet that actually parses the arguments, so
-// it cannot drift from it, and it reads the way a flag package tool reads. The
-// long forms work too, since the flag package accepts either, but a tool whose
-// own flags print as -v should not print --agent next to them.
+// it cannot drift from it. It also reads the way a flag package tool reads.
+// The long forms work as well, since the flag package accepts either. A tool
+// whose own flags print as -v should not print --agent next to them.
 //
 //declscope:package // cli.go installs it as each subcommand's flag.Usage
 func (in *Installer) usageFor(sub string, fs *flag.FlagSet) string {
