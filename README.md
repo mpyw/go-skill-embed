@@ -371,6 +371,16 @@ tell a mistyped flag from a disk that is full.
 | `ErrNoAgentSelected` | The values resolved to nothing |
 | `ErrNeedsForce` | A destination was left alone. `ForceRequiredError` names them |
 
+## The skill for this library
+
+`skills/go-skill-embed-adoption/SKILL.md` covers adopting the library: which
+front end to choose, the four traps that are silent, and how to check the
+result. Install it into a repository that is about to embed skills.
+
+```bash
+gh skill install mpyw/go-skill-embed go-skill-embed-adoption --agent claude-code
+```
+
 ## Development
 
 Tools are pinned in `mise.toml`.
@@ -385,7 +395,8 @@ after changing a flag or a default.
 
 Declaration scopes are enforced by [declscope](https://github.com/mpyw/declscope),
 at `qualify: ondemand` with `exported: true`. The settings are in
-`.declscope.yaml`.
+`.declscope.yaml`, and its adoption skill is installed at
+`.claude/skills/declscope-adoption`.
 
 ## License
 
