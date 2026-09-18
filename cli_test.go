@@ -26,6 +26,7 @@ func newCLIInstaller(t *testing.T, opts ...InstallerOption) *Installer {
 // multichecker and unitchecker treat every non-flag argument as a package
 // pattern, and `go vet -vettool=` passes -flags or a config file path.
 func TestInterceptLeavesTheDriverAlone(t *testing.T) {
+	ctx := t.Context()
 	in := newCLIInstaller(t)
 
 	for _, argv := range [][]string{
@@ -38,7 +39,7 @@ func TestInterceptLeavesTheDriverAlone(t *testing.T) {
 		{"mytool", "-skill"},  // a flag, not the subcommand
 		{"mytool", "./skill"}, // a package pattern that contains it
 	} {
-		handled, err := in.cliIntercept(argv)
+		handled, err := in.cliIntercept(ctx, argv)
 		if handled {
 			t.Errorf("%q was intercepted", argv)
 		}
@@ -49,10 +50,11 @@ func TestInterceptLeavesTheDriverAlone(t *testing.T) {
 }
 
 func TestInterceptTakesTheSubcommand(t *testing.T) {
+	ctx := t.Context()
 	dest := filepath.Join(t.TempDir(), "skills")
 	in := newCLIInstaller(t)
 
-	handled, err := in.cliIntercept([]string{"mytool", "skill", "install", "--dir", dest, "demo-skill"})
+	handled, err := in.cliIntercept(ctx, []string{"mytool", "skill", "install", "--dir", dest, "demo-skill"})
 	if !handled {
 		t.Fatal("skill install was not intercepted")
 	}
@@ -60,7 +62,7 @@ func TestInterceptTakesTheSubcommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handled, err = in.cliIntercept([]string{"mytool", "skill", "nonsense"})
+	handled, err = in.cliIntercept(ctx, []string{"mytool", "skill", "nonsense"})
 	if !handled {
 		t.Fatal("an unknown subcommand was passed through to the driver")
 	}
@@ -69,19 +71,20 @@ func TestInterceptTakesTheSubcommand(t *testing.T) {
 	}
 
 	// Bare `mytool skill` prints help, which is not a failure.
-	handled, err = in.cliIntercept([]string{"mytool", "skill"})
+	handled, err = in.cliIntercept(ctx, []string{"mytool", "skill"})
 	if !handled || err != nil {
 		t.Errorf("bare skill: handled=%v err=%v", handled, err)
 	}
 }
 
 func TestInterceptHonoursTheCommandName(t *testing.T) {
+	ctx := t.Context()
 	in := newCLIInstaller(t, WithCommandName("skills"))
 
-	if handled, _ := in.cliIntercept([]string{"mytool", "skill"}); handled {
+	if handled, _ := in.cliIntercept(ctx, []string{"mytool", "skill"}); handled {
 		t.Error("the default name was still intercepted")
 	}
-	if handled, _ := in.cliIntercept([]string{"mytool", "skills"}); !handled {
+	if handled, _ := in.cliIntercept(ctx, []string{"mytool", "skills"}); !handled {
 		t.Error("the configured name was not intercepted")
 	}
 }
@@ -90,10 +93,11 @@ func TestInterceptHonoursTheCommandName(t *testing.T) {
 // package's own flag block. The frame is what the flag package cannot give,
 // and the block is what it should not be asked to give up.
 func TestSubcommandHelp(t *testing.T) {
+	ctx := t.Context()
 	out := &bytes.Buffer{}
 	in := newCLIInstaller(t, WithOutput(out))
 
-	if err := in.Run([]string{"install", "-h"}); !errors.Is(err, ErrHelp) {
+	if err := in.Run(ctx, []string{"install", "-h"}); !errors.Is(err, ErrHelp) {
 		t.Fatalf("Run(install -h) = %v, want ErrHelp", err)
 	}
 	help := out.String()

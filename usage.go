@@ -30,11 +30,11 @@ func (in *Installer) Usage() string {
 //	}
 func (in *Installer) UsageHint() string {
 	skills := "skill"
-	if in.Set().Len() != 1 {
+	if in.set.Len() != 1 {
 		skills = "skills"
 	}
 	return fmt.Sprintf("Run %q to install the %d agent %s embedded in %s.",
-		in.ToolName()+" "+in.CommandName(), in.Set().Len(), skills, in.ToolName())
+		in.ToolName()+" "+in.CommandName(), in.set.Len(), skills, in.ToolName())
 }
 
 // usageHeadings are the first line and the usage line of each subcommand's
@@ -81,7 +81,7 @@ func (in *Installer) usageFor(sub string, fs *flag.FlagSet) string {
 	b.WriteString("\nEmbedded skills:\n")
 
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	for _, sk := range in.Set().Skills() {
+	for _, sk := range in.set.Skills() {
 		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", sk.Name, usageFirstLine(sk.Description))
 	}
 	_ = tw.Flush()

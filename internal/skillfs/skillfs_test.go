@@ -58,7 +58,7 @@ func TestDigestNoticesAnEdit(t *testing.T) {
 
 func TestWriteRestoresTheExecutableBit(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "demo")
-	if err := Write(demoFS(), dest, WriteOptions{}); err != nil {
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,7 +89,7 @@ func TestWriteReplacesWhatIsThere(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Write(demoFS(), dest, WriteOptions{}); err != nil {
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(stale); err == nil {
@@ -99,7 +99,7 @@ func TestWriteReplacesWhatIsThere(t *testing.T) {
 
 func TestWriteTransforms(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "demo")
-	err := Write(demoFS(), dest, WriteOptions{
+	err := Write(t.Context(), demoFS(), dest, WriteOptions{
 		Transform: func(name string, data []byte) ([]byte, error) {
 			if name != manifest.FileName {
 				return data, nil
@@ -145,7 +145,7 @@ func TestWriteSkipsOperatingSystemJunk(t *testing.T) {
 	src[".DS_Store"] = &fstest.MapFile{Data: []byte("\x00\x01binary")}
 
 	dest := filepath.Join(t.TempDir(), "demo")
-	if err := Write(src, dest, WriteOptions{}); err != nil {
+	if err := Write(t.Context(), src, dest, WriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, ".DS_Store")); err == nil {

@@ -34,17 +34,17 @@ func Command(in *skillembed.Installer) *cli.Command {
 }
 
 // action builds install or uninstall, which differ only in what they call.
-func action(in *skillembed.Installer, name, usage string, run func(skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
+func action(in *skillembed.Installer, name, usage string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
 	return &cli.Command{
 		Name:      name,
 		Usage:     usage,
 		ArgsUsage: "[skill...]",
 		Flags:     flags(in),
-		Action: func(_ context.Context, cmd *cli.Command) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			o := options(cmd)
 			// Report first: the results describe everything that happened
 			// before the error.
-			results, runErr := run(o)
+			results, runErr := run(ctx, o)
 			if _, err := io.WriteString(writer(cmd), skillembed.RenderCLIResults(results, o.DryRun)); err != nil {
 				return err
 			}
@@ -59,8 +59,8 @@ func list(in *skillembed.Installer) *cli.Command {
 		Usage:     "Show the embedded skills and where they stand",
 		ArgsUsage: "[skill...]",
 		Flags:     flags(in),
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			statuses, err := in.Status(options(cmd))
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			statuses, err := in.Status(ctx, options(cmd))
 			if err != nil {
 				return err
 			}

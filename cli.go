@@ -2,6 +2,7 @@ package skillembed
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,21 +25,21 @@ var ErrHelp = flag.ErrHelp
 // and urfave/cli adapters call underneath, and what Intercept wraps.
 //
 //declscope:ignore qualify // written by hand in the user's main, where CliIntercept would read worse
-func (in *Installer) Run(args []string) error {
+func (in *Installer) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		_, _ = io.WriteString(in.Output(), in.Usage())
+		_, _ = io.WriteString(in.cliOut(), in.Usage())
 		return ErrHelp
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "install":
-		return in.cliInstall(rest)
+		return in.cliInstall(ctx, rest)
 	case "uninstall", "remove":
-		return in.cliUninstall(rest)
+		return in.cliUninstall(ctx, rest)
 	case "list", "ls":
-		return in.cliList(rest)
+		return in.cliList(ctx, rest)
 	case "help", "-h", "--help":
-		_, _ = io.WriteString(in.Output(), in.Usage())
+		_, _ = io.WriteString(in.cliOut(), in.Usage())
 		return nil
 	}
 	_, _ = io.WriteString(os.Stderr, in.Usage())
@@ -69,7 +70,7 @@ func (in *Installer) Run(args []string) error {
 //
 //declscope:ignore qualify // written by hand in the user's main, where CliIntercept would read worse
 func (in *Installer) Intercept() {
-	handled, err := in.cliIntercept(os.Args)
+	handled, err := in.cliIntercept(context.Background(), os.Args)
 	if !handled {
 		return
 	}
@@ -82,11 +83,11 @@ func (in *Installer) Intercept() {
 
 // cliIntercept holds everything about Intercept that can be decided without
 // exiting the process, so that a test can reach it.
-func (in *Installer) cliIntercept(argv []string) (handled bool, err error) {
+func (in *Installer) cliIntercept(ctx context.Context, argv []string) (handled bool, err error) {
 	if len(argv) < 2 || argv[1] != in.CommandName() {
 		return false, nil
 	}
-	if err := in.Run(argv[2:]); err != nil && !errors.Is(err, ErrHelp) {
+	if err := in.Run(ctx, argv[2:]); err != nil && !errors.Is(err, ErrHelp) {
 		return true, err
 	}
 	return true, nil
@@ -109,6 +110,14 @@ func (r cliRepeatable) String() string {
 func (r cliRepeatable) Set(v string) error {
 	*r.dest = append(*r.dest, v)
 	return nil
+}
+
+// cliOut is where Run reports. It defaults to os.Stdout.
+func (in *Installer) cliOut() io.Writer {
+	if in.out == nil {
+		return os.Stdout
+	}
+	return in.out
 }
 
 // cliScope binds the typed Scope to a string flag.
@@ -136,7 +145,7 @@ func (s cliScope) Set(v string) error {
 // the same way.
 func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
-		in.AgentChoices(), strings.Join(in.DefaultAgentNames(), ",")))
+		in.AgentChoices(), strings.Join(in.defaultAgent, ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
 	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
 	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
@@ -150,9 +159,9 @@ func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 //declscope:package // usage.go renders the flag block from the real FlagSet
 func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet {
 	fs := flag.NewFlagSet(in.CommandName()+" "+sub, flag.ContinueOnError)
-	fs.SetOutput(in.Output())
+	fs.SetOutput(in.cliOut())
 	in.bindCLIFlags(fs, o)
-	fs.Usage = func() { _, _ = io.WriteString(in.Output(), in.usageFor(sub, fs)) }
+	fs.Usage = func() { _, _ = io.WriteString(in.cliOut(), in.usageFor(sub, fs)) }
 	return fs
 }
 
@@ -166,7 +175,7 @@ func (in *Installer) parseCLIOptions(sub string, args []string) (InstallOptions,
 	return o, nil
 }
 
-func (in *Installer) cliInstall(args []string) error {
+func (in *Installer) cliInstall(ctx context.Context, args []string) error {
 	o, err := in.parseCLIOptions("install", args)
 	if err != nil {
 		return err
@@ -174,56 +183,61 @@ func (in *Installer) cliInstall(args []string) error {
 	// Report first. Install and Uninstall describe everything they did before
 	// the error, and a run that wrote three skills and refused a fourth should
 	// say so.
-	results, runErr := in.Install(o)
-	if _, err := io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun)); err != nil {
+	results, runErr := in.Install(ctx, o)
+	if _, err := io.WriteString(in.cliOut(), RenderCLIResults(results, o.DryRun)); err != nil {
 		return err
 	}
 	return runErr
 }
 
-func (in *Installer) cliUninstall(args []string) error {
+func (in *Installer) cliUninstall(ctx context.Context, args []string) error {
 	o, err := in.parseCLIOptions("uninstall", args)
 	if err != nil {
 		return err
 	}
-	results, runErr := in.Uninstall(o)
-	if _, err := io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun)); err != nil {
+	results, runErr := in.Uninstall(ctx, o)
+	if _, err := io.WriteString(in.cliOut(), RenderCLIResults(results, o.DryRun)); err != nil {
 		return err
 	}
 	return runErr
 }
 
-func (in *Installer) cliList(args []string) error {
+func (in *Installer) cliList(ctx context.Context, args []string) error {
 	o, err := in.parseCLIOptions("list", args)
 	if err != nil {
 		return err
 	}
-	statuses, err := in.Status(o)
+	statuses, err := in.Status(ctx, o)
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(in.Output(), in.renderCLIList(statuses))
+	_, err = io.WriteString(in.cliOut(), RenderCLIStatus(statuses))
 	return err
 }
 
-// renderCLIList describes the embedded skills and where each one stands.
-func (in *Installer) renderCLIList(statuses []InstallStatus) string {
+// RenderCLIStatus is everything `list` prints: each skill once with its
+// description, then a row per destination.
+//
+// It is the whole of the subcommand's output, not a part of it, so that every
+// front end that calls it says the same thing. The skills come from the
+// statuses rather than from the set, so a run narrowed by name describes only
+// what it was asked about.
+func RenderCLIStatus(statuses []InstallStatus) string {
 	var b bytes.Buffer
-	for _, sk := range in.Set().Skills() {
-		fmt.Fprintf(&b, "%s\n", sk.Name)
-		if sk.Description != "" {
-			fmt.Fprintf(&b, "  %s\n", usageFirstLine(sk.Description))
+
+	seen := map[string]bool{}
+	for _, st := range statuses {
+		if seen[st.Skill.Name] {
+			continue
+		}
+		seen[st.Skill.Name] = true
+		fmt.Fprintf(&b, "%s\n", st.Skill.Name)
+		if st.Skill.Description != "" {
+			fmt.Fprintf(&b, "  %s\n", usageFirstLine(st.Skill.Description))
 		}
 	}
 	b.WriteByte('\n')
-	b.WriteString(RenderCLIStatus(statuses))
-	return b.String()
-}
 
-// RenderCLIStatus is the table list prints. The adapters use it so that every
-// front end reports the same way.
-func RenderCLIStatus(statuses []InstallStatus) string {
-	var b bytes.Buffer
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "SKILL\tSTATE\tPATH")
 	for _, st := range statuses {

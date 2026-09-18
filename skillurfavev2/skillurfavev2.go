@@ -10,6 +10,7 @@
 package skillurfavev2
 
 import (
+	"context"
 	"io"
 	"os"
 
@@ -33,7 +34,7 @@ func Command(in *skillembed.Installer) *cli.Command {
 }
 
 // action builds install or uninstall, which differ only in what they call.
-func action(in *skillembed.Installer, name, usage string, run func(skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
+func action(in *skillembed.Installer, name, usage string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
 	return &cli.Command{
 		Name:      name,
 		Usage:     usage,
@@ -43,7 +44,7 @@ func action(in *skillembed.Installer, name, usage string, run func(skillembed.In
 			o := options(c)
 			// Report first: the results describe everything that happened
 			// before the error.
-			results, runErr := run(o)
+			results, runErr := run(c.Context, o)
 			if _, err := io.WriteString(writer(c), skillembed.RenderCLIResults(results, o.DryRun)); err != nil {
 				return err
 			}
@@ -59,7 +60,7 @@ func list(in *skillembed.Installer) *cli.Command {
 		ArgsUsage: "[skill...]",
 		Flags:     flags(in),
 		Action: func(c *cli.Context) error {
-			statuses, err := in.Status(options(c))
+			statuses, err := in.Status(c.Context, options(c))
 			if err != nil {
 				return err
 			}

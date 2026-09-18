@@ -83,11 +83,12 @@ func TestProjectScopeMergesTheSharedDirectory(t *testing.T) {
 }
 
 func TestInstallLifecycle(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 	opts := skillembed.InstallOptions{Dir: dest, Names: []string{"demo-skill"}}
 
-	results, err := in.Install(opts)
+	results, err := in.Install(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,14 +111,14 @@ func TestInstallLifecycle(t *testing.T) {
 	}
 
 	// Installing again is a no-op.
-	statuses, err := in.Status(opts)
+	statuses, err := in.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if statuses[0].State != skillembed.StateUpToDate {
 		t.Fatalf("state after install = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
 	}
-	results, err = in.Install(opts)
+	results, err = in.Install(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,20 +130,20 @@ func TestInstallLifecycle(t *testing.T) {
 	if err := os.WriteFile(manifest, append(body, []byte("\nedited by hand\n")...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	statuses, err = in.Status(opts)
+	statuses, err = in.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if statuses[0].State != skillembed.StateModified {
 		t.Fatalf("state after an edit = %s, want %s", statuses[0].State, skillembed.StateModified)
 	}
-	if _, err := in.Install(opts); err == nil {
+	if _, err := in.Install(ctx, opts); err == nil {
 		t.Error("install overwrote an edited skill without --force")
 	}
 
 	forced := opts
 	forced.Force = true
-	results, err = in.Install(forced)
+	results, err = in.Install(ctx, forced)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +151,7 @@ func TestInstallLifecycle(t *testing.T) {
 		t.Errorf("forced install = %s, want %s", results[0].Action, skillembed.ActionUpdated)
 	}
 
-	removed, err := in.Uninstall(opts)
+	removed, err := in.Uninstall(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,28 +164,29 @@ func TestInstallLifecycle(t *testing.T) {
 }
 
 func TestSkillsFromAnotherToolAreLeftAlone(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 	opts := skillembed.InstallOptions{Dir: dest, Names: []string{"demo-skill"}}
 
-	if _, err := in.Install(opts); err != nil {
+	if _, err := in.Install(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
 
 	// A second tool of a different name finds the same directory occupied.
 	other, _ := newInstaller(t, skillembed.WithToolName("othertool"), skillembed.WithProjectRoot(root))
-	statuses, err := other.Status(opts)
+	statuses, err := other.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if statuses[0].State != skillembed.StateForeign {
 		t.Fatalf("state = %s, want %s", statuses[0].State, skillembed.StateForeign)
 	}
-	if _, err := other.Install(opts); err == nil {
+	if _, err := other.Install(ctx, opts); err == nil {
 		t.Error("install replaced another tool's skill without --force")
 	}
 
-	results, err := other.Uninstall(opts)
+	results, err := other.Uninstall(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,10 +196,11 @@ func TestSkillsFromAnotherToolAreLeftAlone(t *testing.T) {
 }
 
 func TestDryRunWritesNothing(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 
-	results, err := in.Install(skillembed.InstallOptions{Dir: dest, DryRun: true})
+	results, err := in.Install(ctx, skillembed.InstallOptions{Dir: dest, DryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,11 +213,12 @@ func TestDryRunWritesNothing(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
+	ctx := t.Context()
 	out := &bytes.Buffer{}
 	in, root := newInstaller(t, skillembed.WithOutput(out))
 	dest := filepath.Join(root, "skills")
 
-	if err := in.Run([]string{"install", "--dir", dest, "demo-skill"}); err != nil {
+	if err := in.Run(ctx, []string{"install", "--dir", dest, "demo-skill"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "installed") {
@@ -225,17 +229,17 @@ func TestRun(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := in.Run([]string{"list", "--dir", dest}); err != nil {
+	if err := in.Run(ctx, []string{"list", "--dir", dest}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "up-to-date") {
 		t.Errorf("list said:\n%s", out)
 	}
 
-	if err := in.Run([]string{"nonsense"}); err == nil {
+	if err := in.Run(ctx, []string{"nonsense"}); err == nil {
 		t.Error("an unknown subcommand was accepted")
 	}
-	if err := in.Run([]string{"install", "--agent", "nonsense"}); err == nil {
+	if err := in.Run(ctx, []string{"install", "--agent", "nonsense"}); err == nil {
 		t.Error("an unknown agent was accepted")
 	}
 }
@@ -244,13 +248,14 @@ func TestRun(t *testing.T) {
 // up-to-date afterwards, which it does not if the added block cannot be
 // stripped back off for the digest.
 func TestSkillWithoutFrontmatterInstallsClean(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	opts := skillembed.InstallOptions{Dir: filepath.Join(root, "skills"), Names: []string{"bare-skill"}}
 
-	if _, err := in.Install(opts); err != nil {
+	if _, err := in.Install(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
-	statuses, err := in.Status(opts)
+	statuses, err := in.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,10 +334,11 @@ func TestEmbeddedJunkIsRejected(t *testing.T) {
 
 // The same file beside an installed skill is the file browser, not the user.
 func TestInstalledJunkIsIgnored(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	opts := skillembed.InstallOptions{Dir: filepath.Join(root, "skills"), Names: []string{"demo-skill"}}
 
-	if _, err := in.Install(opts); err != nil {
+	if _, err := in.Install(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
 	junk := filepath.Join(root, "skills", "demo-skill", ".DS_Store")
@@ -340,14 +346,14 @@ func TestInstalledJunkIsIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	statuses, err := in.Status(opts)
+	statuses, err := in.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if statuses[0].State != skillembed.StateUpToDate {
 		t.Errorf("state = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
 	}
-	results, err := in.Install(opts)
+	results, err := in.Install(ctx, opts)
 	if err != nil {
 		t.Fatalf("install refused over a .DS_Store: %v", err)
 	}
@@ -360,6 +366,7 @@ func TestInstalledJunkIsIgnored(t *testing.T) {
 // back as ActionSkipped, the way Uninstall has always reported the same thing,
 // and the error is one a caller can match.
 func TestInstallReportsBlockedAndWritesTheRest(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 
@@ -371,7 +378,7 @@ func TestInstallReportsBlockedAndWritesTheRest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := in.Install(skillembed.InstallOptions{Dir: dest})
+	results, err := in.Install(ctx, skillembed.InstallOptions{Dir: dest})
 	if !errors.Is(err, skillembed.ErrNeedsForce) {
 		t.Fatalf("err = %v, want it to wrap ErrNeedsForce", err)
 	}
@@ -410,11 +417,12 @@ func TestInstallReportsBlockedAndWritesTheRest(t *testing.T) {
 // a user dropped in, used to fail Status and with it Install and Uninstall for
 // every skill at that target, --force included. The only way out was rm -rf.
 func TestUnreadableInstallStaysRepairable(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 	opts := skillembed.InstallOptions{Dir: dest}
 
-	if _, err := in.Install(opts); err != nil {
+	if _, err := in.Install(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(dest, "demo-skill", "link.txt")
@@ -422,7 +430,7 @@ func TestUnreadableInstallStaysRepairable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	statuses, err := in.Status(opts)
+	statuses, err := in.Status(ctx, opts)
 	if err != nil {
 		t.Fatalf("Status failed over a symlink: %v", err)
 	}
@@ -439,7 +447,7 @@ func TestUnreadableInstallStaysRepairable(t *testing.T) {
 
 	forced := opts
 	forced.Force = true
-	results, err := in.Install(forced)
+	results, err := in.Install(ctx, forced)
 	if err != nil {
 		t.Fatalf("forced install failed over a symlink: %v", err)
 	}
@@ -452,7 +460,7 @@ func TestUnreadableInstallStaysRepairable(t *testing.T) {
 		t.Error("the symlink survived a forced install")
 	}
 
-	if _, err := in.Uninstall(forced); err != nil {
+	if _, err := in.Uninstall(ctx, forced); err != nil {
 		t.Fatalf("forced uninstall failed: %v", err)
 	}
 }
@@ -460,6 +468,7 @@ func TestUnreadableInstallStaysRepairable(t *testing.T) {
 // A front end wants to map "you typed a bad value" to a different exit code
 // than "the disk is full", and so does a test.
 func TestErrorsAreMatchable(t *testing.T) {
+	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
 
@@ -478,7 +487,7 @@ func TestErrorsAreMatchable(t *testing.T) {
 		{"dir with a bad agent", skillembed.InstallOptions{Dir: dest, Agents: []string{"nonsense"}}, skillembed.ErrUnknownAgent},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := in.Status(c.opts)
+			_, err := in.Status(ctx, c.opts)
 			if !errors.Is(err, c.want) {
 				t.Errorf("err = %v, want it to wrap %v", err, c.want)
 			}

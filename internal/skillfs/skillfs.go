@@ -7,6 +7,7 @@ package skillfs
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -86,7 +87,7 @@ type WriteOptions struct {
 //
 // The tree is staged in a sibling directory and swapped in with a rename, so a
 // failure part way through leaves the existing installation untouched.
-func Write(src fs.FS, dest string, o WriteOptions) error {
+func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 	executable := o.Executable
 	if executable == nil {
 		executable = HasShebang
@@ -104,6 +105,9 @@ func Write(src fs.FS, dest string, o WriteOptions) error {
 
 	err = fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		target, err := safeJoin(staging, p)

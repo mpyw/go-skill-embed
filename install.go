@@ -1,6 +1,7 @@
 package skillembed
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,18 +18,26 @@ import (
 
 // Installer installs embedded skills into agent directories.
 type Installer struct {
-	set          *SkillSet
-	toolName     string
-	version      string
-	commandName  string
-	agents       []Agent
+	// set, agents, defaultAgent and out are the installer's configuration as
+	// the front end sees it. cli.go, usage.go and agent.go read them to build
+	// help and to decide where to write.
+	//
+	//declscope:package
+	set         *SkillSet
+	toolName    string
+	version     string
+	commandName string
+	//declscope:package
+	agents []Agent
+	//declscope:package
 	defaultAgent []string
 	defaultScope Scope
 	projectRoot  string
 	metadata     bool
 	executable   func(name string, data []byte) bool
 	now          func() time.Time
-	out          io.Writer
+	//declscope:package
+	out io.Writer
 }
 
 // InstallerOption configures an Installer.
@@ -130,20 +139,6 @@ func NewInstaller(set *SkillSet, opts ...InstallerOption) *Installer {
 	return in
 }
 
-// Output returns the writer Run reports to.
-func (in *Installer) Output() io.Writer {
-	if in.out == nil {
-		return os.Stdout
-	}
-	return in.out
-}
-
-// Set returns the embedded skills.
-func (in *Installer) Set() *SkillSet { return in.set }
-
-// Agents returns the agents the tool offers.
-func (in *Installer) Agents() []Agent { return append([]Agent(nil), in.agents...) }
-
 // CommandName returns the subcommand name.
 func (in *Installer) CommandName() string { return in.commandName }
 
@@ -152,9 +147,6 @@ func (in *Installer) ToolName() string { return in.toolName }
 
 // DefaultScope returns the scope used when none is given.
 func (in *Installer) DefaultScope() Scope { return in.defaultScope }
-
-// DefaultAgentNames returns the agents used when none are given.
-func (in *Installer) DefaultAgentNames() []string { return append([]string(nil), in.defaultAgent...) }
 
 // InstallOptions are the inputs shared by install, uninstall and list.
 type InstallOptions struct {
@@ -296,7 +288,7 @@ type InstallStatus struct {
 }
 
 // Status reports what is installed where, without changing anything.
-func (in *Installer) Status(o InstallOptions) ([]InstallStatus, error) {
+func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallStatus, error) {
 	targets, err := in.Targets(o)
 	if err != nil {
 		return nil, err
@@ -308,6 +300,9 @@ func (in *Installer) Status(o InstallOptions) ([]InstallStatus, error) {
 	out := make([]InstallStatus, 0, len(targets)*len(skills))
 	for _, t := range targets {
 		for _, sk := range skills {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			st, err := in.inspect(t, sk)
 			if err != nil {
 				return nil, err
@@ -393,8 +388,8 @@ type InstallResult struct {
 //
 // The results are meaningful even when the error is not nil. They describe
 // everything that happened before it.
-func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
-	statuses, err := in.Status(o)
+func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallResult, error) {
+	statuses, err := in.Status(ctx, o)
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +397,9 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 	var blocked []InstallStatus
 	results := make([]InstallResult, 0, len(statuses))
 	for _, st := range statuses {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
 		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
 		case st.State == StateModified && !o.Force:
@@ -418,7 +416,7 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 			r.Action = ActionUpdated
 		}
 		if r.Action != ActionSkipped && !o.DryRun {
-			if err := in.write(st.Skill, st.Path); err != nil {
+			if err := in.write(ctx, st.Skill, st.Path); err != nil {
 				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
 			}
 		}
@@ -434,13 +432,16 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 // tool did not install are left alone unless InstallOptions.Force is set.
 //
 // The results are meaningful even when the error is not nil.
-func (in *Installer) Uninstall(o InstallOptions) ([]InstallResult, error) {
-	statuses, err := in.Status(o)
+func (in *Installer) Uninstall(ctx context.Context, o InstallOptions) ([]InstallResult, error) {
+	statuses, err := in.Status(ctx, o)
 	if err != nil {
 		return nil, err
 	}
 	results := make([]InstallResult, 0, len(statuses))
 	for _, st := range statuses {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
 		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
 		case st.State == StateMissing:
@@ -463,12 +464,12 @@ func (in *Installer) Uninstall(o InstallOptions) ([]InstallResult, error) {
 }
 
 // write materialises one skill at dest.
-func (in *Installer) write(sk Skill, dest string) error {
+func (in *Installer) write(ctx context.Context, sk Skill, dest string) error {
 	src, err := sk.FS()
 	if err != nil {
 		return err
 	}
-	return skillfs.Write(src, dest, skillfs.WriteOptions{
+	return skillfs.Write(ctx, src, dest, skillfs.WriteOptions{
 		Transform:  in.stamp(sk),
 		Executable: in.executable,
 	})

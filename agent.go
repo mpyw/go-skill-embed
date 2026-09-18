@@ -125,7 +125,7 @@ func DefaultAgents() []Agent {
 
 // AgentChoices renders the --agent help string, such as {a|b|c}. An adapter
 // that writes its own flag help uses it to name the same agents.
-func (in *Installer) AgentChoices() string { return agentChoices(in.Agents()) }
+func (in *Installer) AgentChoices() string { return agentChoices(in.agents) }
 
 // agentsFallBackToAll is the answer when "detected" found nothing. A machine
 // with no agent directory is one where any guess is as good as another, and

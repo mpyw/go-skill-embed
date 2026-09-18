@@ -7,6 +7,7 @@
 package skillcobra
 
 import (
+	"context"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ func Command(in *skillembed.Installer) *cobra.Command {
 
 // action builds install or uninstall, which differ only in what they call and
 // what they print.
-func action(in *skillembed.Installer, name, short string, run func(skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cobra.Command {
+func action(in *skillembed.Installer, name, short string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cobra.Command {
 	var o skillembed.InstallOptions
 	cmd := &cobra.Command{
 		Use:   name + " [skill...]",
@@ -44,7 +45,7 @@ func action(in *skillembed.Installer, name, short string, run func(skillembed.In
 			o.Names = args
 			// Report first: the results describe everything that happened
 			// before the error.
-			results, runErr := run(o)
+			results, runErr := run(cmd.Context(), o)
 			if _, err := io.WriteString(cmd.OutOrStdout(), skillembed.RenderCLIResults(results, o.DryRun)); err != nil {
 				return err
 			}
@@ -62,7 +63,7 @@ func list(in *skillembed.Installer) *cobra.Command {
 		Short: "Show the embedded skills and where they stand",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Names = args
-			statuses, err := in.Status(o)
+			statuses, err := in.Status(cmd.Context(), o)
 			if err != nil {
 				return err
 			}

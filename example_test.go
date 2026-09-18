@@ -1,6 +1,7 @@
 package skillembed_test
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"flag"
@@ -30,6 +31,7 @@ func ExampleMustSkillsFromFS() {
 }
 
 func ExampleInstaller_Install() {
+	ctx := context.Background()
 	skills := skillembed.NewInstaller(
 		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
 		skillembed.WithToolName("mytool"),
@@ -42,7 +44,7 @@ func ExampleInstaller_Install() {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	results, err := skills.Install(skillembed.InstallOptions{
+	results, err := skills.Install(ctx, skillembed.InstallOptions{
 		Dir:   dir,
 		Names: []string{"demo-skill"},
 	})
@@ -55,7 +57,7 @@ func ExampleInstaller_Install() {
 
 	// Installing again writes nothing, because the digest recorded in the
 	// installed SKILL.md still matches.
-	results, err = skills.Install(skillembed.InstallOptions{
+	results, err = skills.Install(ctx, skillembed.InstallOptions{
 		Dir:   dir,
 		Names: []string{"demo-skill"},
 	})
@@ -72,6 +74,7 @@ func ExampleInstaller_Install() {
 }
 
 func ExampleInstaller_Status() {
+	ctx := context.Background()
 	skills := skillembed.NewInstaller(
 		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
 		skillembed.WithToolName("mytool"),
@@ -84,7 +87,7 @@ func ExampleInstaller_Status() {
 	defer func() { _ = os.RemoveAll(dir) }()
 
 	report := func() {
-		statuses, err := skills.Status(skillembed.InstallOptions{Dir: dir})
+		statuses, err := skills.Status(ctx, skillembed.InstallOptions{Dir: dir})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -94,7 +97,7 @@ func ExampleInstaller_Status() {
 	}
 
 	report()
-	if _, err := skills.Install(skillembed.InstallOptions{Dir: dir}); err != nil {
+	if _, err := skills.Install(ctx, skillembed.InstallOptions{Dir: dir}); err != nil {
 		log.Fatal(err)
 	}
 	report()
@@ -148,13 +151,14 @@ func ExampleInstaller_Intercept_analysisDriver() {
 // instead of exiting, so the caller keeps control, and asking for help is not
 // a failure.
 func ExampleInstaller_Run() {
+	ctx := context.Background()
 	skills := skillembed.NewInstaller(
 		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
 		skillembed.WithToolName("mytool"),
 		skillembed.WithOutput(os.Stdout),
 	)
 
-	if err := skills.Run(nil); err != nil && !errors.Is(err, skillembed.ErrHelp) {
+	if err := skills.Run(ctx, nil); err != nil && !errors.Is(err, skillembed.ErrHelp) {
 		log.Fatal(err)
 	}
 

@@ -193,7 +193,7 @@ returns one `InstallResult` per skill either way, and returns an error wrapping
 when the error is not.
 
 ```go
-results, err := skills.Install(o)
+results, err := skills.Install(ctx, o)
 report(results)
 if errors.Is(err, skillembed.ErrNeedsForce) {
 	// tell the user to re-run with --force
@@ -298,14 +298,26 @@ app := &cli.Command{
 `Run` never calls `os.Exit`, so a driver keeps control.
 
 ```go
-results, err := skills.Install(skillembed.InstallOptions{
+results, err := skills.Install(ctx, skillembed.InstallOptions{
 	Agents: []string{"claude-code"},
-	Scope:  "user",
+	Scope:  skillembed.ScopeUser,
 })
 ```
 
 `Status` reports without changing anything. `Install` and `Uninstall` return
-one `InstallResult` per skill per destination.
+one `InstallResult` per skill per destination. All three take a context and
+stop between skills when it is cancelled.
+
+Every error a user's own input can cause wraps a sentinel, so a front end can
+tell a mistyped flag from a disk that is full.
+
+| Error | Cause |
+| --- | --- |
+| `ErrUnknownAgent` | `--agent` named no agent |
+| `ErrUnknownScope` | `--scope` was neither `project` nor `user` |
+| `ErrUnknownSkill` | A named skill is not embedded |
+| `ErrNoAgentSelected` | The values resolved to nothing |
+| `ErrNeedsForce` | A destination was left alone. `ForceRequiredError` names them |
 
 ## Development
 

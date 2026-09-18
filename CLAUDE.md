@@ -129,6 +129,21 @@ over an in-memory buffer. errcheck's default exclusions cover `bytes.Buffer`
 and `os.Stderr` but not `tabwriter`. The write that can actually fail is the
 one to the real writer, and that one is checked.
 
+**Exporting an accessor to get a field across a file.** declscope's boundary
+rule only polices unexported declarations, so exporting something is the one
+guaranteed way to silence it. Four accessors existed for no other reason, and
+each was a permanent public promise bought with a file split. The four fields
+carry a `//declscope:package` instead, which says the same thing in the source
+and costs nothing outside the module. `CommandName`, `ToolName`, `DefaultScope`
+and `AgentChoices` stay exported, because an adapter in another module really
+does need them.
+
+**Exporting half of the rendering.** `RenderCLIStatus` was the table alone, and
+the description block above it lived in an unexported function, so `list` read
+differently in the core and in the adapters. The exported renderer is now the
+whole of what `list` prints, and it takes the skills from the statuses rather
+than from the set.
+
 ## Known and left alone
 
 An adversarial review raised these. They are recorded so the next reader does
