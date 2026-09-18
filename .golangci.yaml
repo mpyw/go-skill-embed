@@ -19,6 +19,14 @@ linters:
       # which is wanted: the rest overlaps what standard already reports.
       rules:
         - name: unused-receiver
+        # A doc comment has to start with the name it documents. A rename that
+        # reaches the comment but not the declaration, or the other way round,
+        # shows up here and nowhere else.
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        # Every package states what it is for.
+        - name: package-comments
 
 formatters:
   enable:

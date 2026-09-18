@@ -129,7 +129,7 @@ func (in *Installer) Output() io.Writer {
 	return in.out
 }
 
-// SkillSet returns the embedded skills.
+// Set returns the embedded skills.
 func (in *Installer) Set() *SkillSet { return in.set }
 
 // Agents returns the agents the tool offers.
@@ -268,7 +268,7 @@ type InstallStatus struct {
 	InstalledVersion string
 }
 
-// InstallStatus reports what is installed where, without changing anything.
+// Status reports what is installed where, without changing anything.
 func (in *Installer) Status(o InstallOptions) ([]InstallStatus, error) {
 	targets, err := in.Targets(o)
 	if err != nil {

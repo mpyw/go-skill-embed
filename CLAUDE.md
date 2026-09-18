@@ -54,6 +54,11 @@ The `replace` directives in the adapter modules point at `../`. Go ignores a
 `replace` in a dependency, so consumers resolve the `require` line normally.
 They are there so the repository builds before a tag exists.
 
+revive runs with `exported` and `package-comments` on top of the standard
+linters. The rename that produced the current names reached doc comments as
+well as declarations, and left two of them starting with the wrong word.
+Nothing else in the standard set looks at that.
+
 `cliTrimLines` runs over every rendered block. A tabwriter pads the last
 column, so a skill with no description printed trailing spaces. Nothing should
 print those, and `gofmt` strips them from an `// Output:` comment, so an
