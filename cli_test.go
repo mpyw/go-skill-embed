@@ -201,3 +201,26 @@ func TestSubcommandHelpSaysWhichSubcommand(t *testing.T) {
 		})
 	}
 }
+
+// The flag package reformats an error from a Value.Set with %v, which drops a
+// wrapped sentinel. Every bad value a user can type has to survive the front
+// end, not only the ones the installer checks for itself.
+func TestSentinelsSurviveTheFrontEnd(t *testing.T) {
+	ctx := t.Context()
+	in := newCLIInstaller(t)
+	dir := t.TempDir()
+
+	for _, c := range []struct {
+		args []string
+		want error
+	}{
+		{[]string{"install", "--scope", "bogus", "--dir", dir}, ErrUnknownScope},
+		{[]string{"install", "--agent", "bogus"}, ErrUnknownAgent},
+		{[]string{"install", "--dir", dir, "bogus"}, ErrUnknownSkill},
+		{[]string{"install", "--agent", ""}, ErrNoAgentSelected},
+	} {
+		if err := in.Run(ctx, c.args); !errors.Is(err, c.want) {
+			t.Errorf("Run(%v) = %v, want it to wrap %v", c.args, err, c.want)
+		}
+	}
+}

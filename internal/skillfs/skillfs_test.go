@@ -312,3 +312,60 @@ func TestExecutableBitsMatch(t *testing.T) {
 		t.Error("an executable .DS_Store was read as part of the skill")
 	}
 }
+
+// Once dest holds the new tree the write has succeeded. Removing the directory
+// that was moved aside is cleanup, and a failure there is not a failed install.
+func TestWriteSucceedsWhenTheAsideTreeCannotBeRemoved(t *testing.T) {
+	root := t.TempDir()
+	// The locked directory is renamed aside during the write, so it has to be
+	// found again by walking rather than by the name it started under.
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err == nil && d.IsDir() {
+				_ = os.Chmod(p, 0o755)
+			}
+			return nil
+		})
+	})
+
+	dest := filepath.Join(root, "demo")
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	// A subdirectory nothing may unlink from.
+	locked := filepath.Join(dest, "locked")
+	if err := os.MkdirAll(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "f"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatalf("a cleanup failure was reported as a write failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, manifest.FileName)); err != nil {
+		t.Errorf("the new tree is not in place: %v", err)
+	}
+}
+
+// Write falls back to the shebang rule when no rule is given, so the check that
+// decides whether an installed copy still matches has to fall back to it too.
+func TestExecutableBitsMatchFallsBackTheSameWay(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := ExecutableBitsMatch(os.DirFS(dest), nil); err != nil || !ok {
+		t.Fatalf("a fresh install does not match: ok=%v err=%v", ok, err)
+	}
+	if err := os.Chmod(filepath.Join(dest, "scripts", "run.sh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := ExecutableBitsMatch(os.DirFS(dest), nil); err != nil || ok {
+		t.Errorf("a lost executable bit went unnoticed: ok=%v err=%v", ok, err)
+	}
+}

@@ -83,7 +83,7 @@ func Digest(fsys fs.FS) (string, error) {
 // the same answer.
 func ExecutableBitsMatch(fsys fs.FS, rule func(name string, data []byte) bool) (bool, error) {
 	if rule == nil {
-		return true, nil
+		rule = HasShebang
 	}
 	match := true
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
@@ -189,6 +189,10 @@ func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 	if err := os.Remove(aside); err != nil {
 		return err
 	}
+	// Reaped whether the swap succeeded, failed, or never reached it. Removing
+	// a name that is not there returns nil, so one defer covers all three, and
+	// nothing is left behind for a later run to trip over.
+	defer func() { _ = os.RemoveAll(aside) }()
 
 	moved := false
 	if _, err := os.Lstat(dest); err == nil {
@@ -207,9 +211,7 @@ func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 		}
 		return err
 	}
-	if moved {
-		return os.RemoveAll(aside)
-	}
+	// dest now holds the new tree. Nothing after this point can fail the write.
 	return nil
 }
 

@@ -42,7 +42,7 @@ func (a Agent) Dir(scope Scope, projectRoot string) (string, error) {
 		}
 		return a.UserDir()
 	}
-	return "", fmt.Errorf("unknown scope %q", scope)
+	return "", fmt.Errorf("%w %q", ErrUnknownScope, scope)
 }
 
 // sharedAgentProjectDir is the directory agreed on by every agent except Claude Code.

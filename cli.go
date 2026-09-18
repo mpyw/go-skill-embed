@@ -127,6 +127,10 @@ func (in *Installer) cliErrOut() io.Writer {
 }
 
 // cliScope binds the typed Scope to a string flag.
+//
+// It stores the value without checking it. The flag package reformats an error
+// from Set with %v, which drops the wrapped ErrUnknownScope, so the check is
+// left to Targets.
 type cliScope struct{ dest *Scope }
 
 // String is called on a zero value to decide whether a default is worth
@@ -139,11 +143,7 @@ func (s cliScope) String() string {
 }
 
 func (s cliScope) Set(v string) error {
-	scope, err := ParseScope(v)
-	if err != nil {
-		return err
-	}
-	*s.dest = scope
+	*s.dest = Scope(v)
 	return nil
 }
 

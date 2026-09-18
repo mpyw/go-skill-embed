@@ -206,11 +206,14 @@ and none of them corrupts anything they did not touch.
 | | |
 | --- | --- |
 | Concurrent installs into one directory | Six of eight raced runs fail on the rename. No corruption, and the last one wins |
-| A killed run leaves `.<name>.tmp-*` behind | Nothing picks it up. The leading dot keeps it out of the agents' way |
+| A killed run leaves `.<name>.tmp-*` or `.<name>.old-*` behind | Nothing picks either up. The leading dot keeps them out of the agents' way |
 | A `SKILL.md` that is a fifo or `/dev/zero` | `inspect` reads it without a size or type guard, so it hangs or grows without bound |
 | Extra `x-embedded-at` lines carry arbitrary text | `Strip` drops every injected key before hashing, so the digest cannot see them |
 | The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
 | A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
+| A user's own `chmod +x` is reverted | The state is `outdated` either way, and install repairs it without asking |
+| `uninstall` exits 0 where `install` exits 1 | Both skip a blocked destination and say so. Only install treats it as a failure |
+| Names differing only by Unicode normalization are not caught | `strings.ToLower` is not the file system's equivalence relation. It catches the ASCII case, which is the one that happens |
 | `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |
 | `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it. `ErrNoAgentSelected` at least makes it matchable |
 | `InstallOptions.Names` is not deduplicated | Naming a skill twice writes it twice |
