@@ -47,18 +47,25 @@ func (in *Installer) Run(args []string) error {
 
 // Intercept runs the skill command when it is the first argument, and exits.
 //
-// Call it as the first statement of main, before any driver that parses the
-// command line itself. singlechecker, unitchecker and multichecker all treat
-// every non-flag argument as a package pattern, so there is no later point at
-// which a subcommand can still be recognised:
+// Call it as the first statement of main, before flag.Parse or any driver that
+// reads the command line itself:
 //
 //	func main() {
 //		skills.Intercept()
-//		singlechecker.Main(mylint.Analyzer)
+//		flag.Parse()
+//		// the rest of your tool
 //	}
 //
-// The guard is the literal first argument, so `go vet -vettool=` invocations,
-// which pass -flags or a config file path, are never affected.
+// The guard is the first argument and nothing else. `mytool skill install`
+// reaches it. `mytool -v skill install` does not, because the first argument
+// is a flag, and the skill command is not something a user reaches after one.
+// It also means a `go vet -vettool=` invocation is never affected, since those
+// pass -flags or a config file path.
+//
+// A go/analysis driver leaves no later point at which a subcommand could still
+// be recognised. singlechecker, unitchecker and multichecker all read every
+// non-flag argument as a package pattern, so running before them is the only
+// option rather than the tidy one.
 //
 //declscope:ignore qualify // written by hand in the user's main, where CliIntercept would read worse
 func (in *Installer) Intercept() {

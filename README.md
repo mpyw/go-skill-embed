@@ -128,11 +128,29 @@ is a module of its own, so embedding skills never pulls cobra into your linter.
 | urfave/cli v3 | `github.com/mpyw/go-skill-embed/skillurfavev3` | `skillurfavev3.Command(skills)` |
 | urfave/cli v2 | `github.com/mpyw/go-skill-embed/skillurfavev2` | `skillurfavev2.Command(skills)` |
 
+### stdlib flag
+
+`Intercept` goes before `flag.Parse`. The skill command is not a flag, so
+`flag.Parse` has nothing to do with it.
+
+```go
+func main() {
+	skills.Intercept()
+	flag.Parse()
+	// the rest of your tool
+}
+```
+
+> [!IMPORTANT]
+> `Intercept` looks at the first argument and nothing else.
+> `mytool skill install` reaches it. `mytool -v skill install` does not.
+> Put your own flags after the subcommand, or before a normal run.
+
 ### go/analysis drivers
 
 `singlechecker`, `multichecker` and `unitchecker` parse the command line
 themselves. Every non-flag argument is a package pattern to them. No hook
-exists after the driver starts, so `Intercept` has to run before it.
+exists after the driver starts, so running before it is the only option.
 
 ```go
 func main() {
@@ -141,9 +159,9 @@ func main() {
 }
 ```
 
-`Intercept` returns immediately unless the first argument is the literal word
-`skill`. A `go vet -vettool=` run passes `-flags` or a config file path, so it
-is never affected. `examples/singlechecker` is a working driver that does this.
+A `go vet -vettool=` run passes `-flags` or a config file path, so it is never
+affected. `examples/singlechecker` is a working driver that does this, with
+tests that run the real binary both ways.
 
 ### cobra
 

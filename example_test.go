@@ -3,6 +3,7 @@ package skillembed_test
 import (
 	"embed"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -104,9 +105,27 @@ func ExampleInstaller_Status() {
 	// demo-skill up-to-date
 }
 
-// A go/analysis driver parses the command line itself, and treats every
-// non-flag argument as a package pattern. Intercept therefore runs before it.
+// Intercept goes before flag.Parse, because the skill command is not a flag
+// and has to be the first argument.
 func ExampleInstaller_Intercept() {
+	skills := skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
+		skillembed.WithToolName("mytool"),
+	)
+
+	verbose := flag.Bool("v", false, "print what is happening")
+
+	// `mytool skill install` is handled here and never returns.
+	// `mytool -v ./...` falls through to the tool itself.
+	skills.Intercept()
+	flag.Parse()
+
+	fmt.Println(*verbose, flag.Args())
+}
+
+// A go/analysis driver reads every non-flag argument as a package pattern, so
+// there is no point after it starts at which a subcommand is still visible.
+func ExampleInstaller_Intercept_analysisDriver() {
 	skills := skillembed.NewInstaller(
 		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
 		skillembed.WithToolName("mylint"),
