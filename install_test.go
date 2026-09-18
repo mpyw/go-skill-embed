@@ -3,6 +3,7 @@ package skillembed_test
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -352,5 +353,106 @@ func TestInstalledJunkIsIgnored(t *testing.T) {
 	}
 	if results[0].Action != skillembed.ActionSkipped {
 		t.Errorf("install = %s, want %s", results[0].Action, skillembed.ActionSkipped)
+	}
+}
+
+// A destination that has to be forced no longer stops the others. It comes
+// back as ActionSkipped, the way Uninstall has always reported the same thing,
+// and the error is one a caller can match.
+func TestInstallReportsBlockedAndWritesTheRest(t *testing.T) {
+	in, root := newInstaller(t)
+	dest := filepath.Join(root, "skills")
+
+	// Something else owns demo-skill's name.
+	if err := os.MkdirAll(filepath.Join(dest, "demo-skill"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, "demo-skill", "SKILL.md"), []byte("hand written\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := in.Install(skillembed.InstallOptions{Dir: dest})
+	if !errors.Is(err, skillembed.ErrNeedsForce) {
+		t.Fatalf("err = %v, want it to wrap ErrNeedsForce", err)
+	}
+	var blocked *skillembed.ForceRequiredError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("err = %T, want *ForceRequiredError", err)
+	}
+	if len(blocked.Blocked) != 1 || blocked.Blocked[0].Skill.Name != "demo-skill" {
+		t.Errorf("blocked = %+v, want demo-skill alone", blocked.Blocked)
+	}
+
+	byName := map[string]skillembed.InstallResult{}
+	for _, r := range results {
+		byName[r.Skill.Name] = r
+	}
+	if len(byName) != 2 {
+		t.Fatalf("results cover %d skills, want 2: %+v", len(byName), results)
+	}
+	if got := byName["demo-skill"].Action; got != skillembed.ActionSkipped {
+		t.Errorf("demo-skill = %s, want %s", got, skillembed.ActionSkipped)
+	}
+	if got := byName["bare-skill"].Action; got != skillembed.ActionInstalled {
+		t.Errorf("bare-skill = %s, want %s", got, skillembed.ActionInstalled)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "bare-skill", "SKILL.md")); err != nil {
+		t.Errorf("the unblocked skill was not written: %v", err)
+	}
+	// The hand written manifest is untouched.
+	body, err := os.ReadFile(filepath.Join(dest, "demo-skill", "SKILL.md"))
+	if err != nil || string(body) != "hand written\n" {
+		t.Errorf("the blocked skill was overwritten: %q %v", body, err)
+	}
+}
+
+// Anything in an installed directory that cannot be hashed, such as a symlink
+// a user dropped in, used to fail Status and with it Install and Uninstall for
+// every skill at that target, --force included. The only way out was rm -rf.
+func TestUnreadableInstallStaysRepairable(t *testing.T) {
+	in, root := newInstaller(t)
+	dest := filepath.Join(root, "skills")
+	opts := skillembed.InstallOptions{Dir: dest}
+
+	if _, err := in.Install(opts); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dest, "demo-skill", "link.txt")
+	if err := os.Symlink(filepath.Join(root, "elsewhere"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	statuses, err := in.Status(opts)
+	if err != nil {
+		t.Fatalf("Status failed over a symlink: %v", err)
+	}
+	byName := map[string]skillembed.State{}
+	for _, st := range statuses {
+		byName[st.Skill.Name] = st.State
+	}
+	if byName["demo-skill"] != skillembed.StateForeign {
+		t.Errorf("demo-skill = %s, want %s", byName["demo-skill"], skillembed.StateForeign)
+	}
+	if byName["bare-skill"] != skillembed.StateUpToDate {
+		t.Errorf("the unrelated skill was dragged in: bare-skill = %s", byName["bare-skill"])
+	}
+
+	forced := opts
+	forced.Force = true
+	results, err := in.Install(forced)
+	if err != nil {
+		t.Fatalf("forced install failed over a symlink: %v", err)
+	}
+	for _, r := range results {
+		if r.Skill.Name == "demo-skill" && r.Action != skillembed.ActionUpdated {
+			t.Errorf("forced install = %s, want %s", r.Action, skillembed.ActionUpdated)
+		}
+	}
+	if _, err := os.Lstat(link); err == nil {
+		t.Error("the symlink survived a forced install")
+	}
+
+	if _, err := in.Uninstall(forced); err != nil {
+		t.Fatalf("forced uninstall failed: %v", err)
 	}
 }

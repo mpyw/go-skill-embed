@@ -41,12 +41,13 @@ func action(in *skillembed.Installer, name, usage string, run func(skillembed.In
 		Flags:     flags(in),
 		Action: func(c *cli.Context) error {
 			o := options(c)
-			results, err := run(o)
-			if err != nil {
+			// Report first: the results describe everything that happened
+			// before the error.
+			results, runErr := run(o)
+			if _, err := io.WriteString(writer(c), skillembed.RenderCLIResults(results, o.DryRun)); err != nil {
 				return err
 			}
-			_, err = io.WriteString(writer(c), skillembed.RenderCLIResults(results, o.DryRun))
-			return err
+			return runErr
 		},
 	}
 }

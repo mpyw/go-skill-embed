@@ -42,12 +42,13 @@ func action(in *skillembed.Installer, name, short string, run func(skillembed.In
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Names = args
-			results, err := run(o)
-			if err != nil {
+			// Report first: the results describe everything that happened
+			// before the error.
+			results, runErr := run(o)
+			if _, err := io.WriteString(cmd.OutOrStdout(), skillembed.RenderCLIResults(results, o.DryRun)); err != nil {
 				return err
 			}
-			_, err = io.WriteString(cmd.OutOrStdout(), skillembed.RenderCLIResults(results, o.DryRun))
-			return err
+			return runErr
 		},
 	}
 	bind(cmd, in, &o)

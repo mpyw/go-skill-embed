@@ -345,7 +345,13 @@ func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 
 	actual, err := skillfs.Digest(os.DirFS(dest))
 	if err != nil {
-		return st, err
+		// Something there cannot be read or hashed, such as a symlink a user
+		// dropped in. We cannot say the copy is ours, so we say it is not, and
+		// --force stays the way out. Propagating the error instead would fail
+		// Status, and with it Install and Uninstall for every other skill at
+		// this target, leaving no way to repair the directory but rm -rf.
+		st.State = StateForeign
+		return st, nil
 	}
 	switch {
 	case actual != recorded:
@@ -372,36 +378,31 @@ type InstallResult struct {
 
 // Install writes the selected skills into the resolved targets.
 //
-// It refuses to touch a destination that this tool did not write, or that was
-// edited after it was written, unless InstallOptions.Force is set.
+// A destination this tool did not write, or one edited after it did, is left
+// alone unless InstallOptions.Force is set. Those skills come back as
+// ActionSkipped with a Reason, exactly as Uninstall reports them, and the
+// error wraps ErrNeedsForce. One blocked destination therefore no longer stops
+// the others from being written.
+//
+// The results are meaningful even when the error is not nil. They describe
+// everything that happened before it.
 func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 	statuses, err := in.Status(o)
 	if err != nil {
 		return nil, err
 	}
 
-	if !o.Force {
-		var blocked []InstallStatus
-		for _, st := range statuses {
-			if st.State.NeedsForce() {
-				blocked = append(blocked, st)
-			}
-		}
-		if len(blocked) > 0 {
-			var b strings.Builder
-			b.WriteString("refusing to overwrite skills this tool did not install, or that were edited after installing:\n")
-			for _, st := range blocked {
-				fmt.Fprintf(&b, "  %s (%s)\n", st.Path, st.State)
-			}
-			b.WriteString("re-run with --force to overwrite")
-			return nil, errors.New(b.String())
-		}
-	}
-
+	var blocked []InstallStatus
 	results := make([]InstallResult, 0, len(statuses))
 	for _, st := range statuses {
 		r := InstallResult{Skill: st.Skill, InstallTarget: st.InstallTarget, Path: st.Path, Before: st.State}
 		switch {
+		case st.State == StateModified && !o.Force:
+			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
+			blocked = append(blocked, st)
+		case st.State == StateForeign && !o.Force:
+			r.Action, r.Reason = ActionSkipped, "installed by something else; use --force"
+			blocked = append(blocked, st)
 		case st.State == StateUpToDate && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "already up to date"
 		case st.State == StateMissing:
@@ -416,11 +417,16 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 		}
 		results = append(results, r)
 	}
+	if len(blocked) > 0 {
+		return results, &ForceRequiredError{Blocked: blocked}
+	}
 	return results, nil
 }
 
 // Uninstall removes the selected skills from the resolved targets. Skills this
 // tool did not install are left alone unless InstallOptions.Force is set.
+//
+// The results are meaningful even when the error is not nil.
 func (in *Installer) Uninstall(o InstallOptions) ([]InstallResult, error) {
 	statuses, err := in.Status(o)
 	if err != nil {

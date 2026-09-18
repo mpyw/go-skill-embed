@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"text/tabwriter"
+	"unicode/utf8"
 )
+
+// usageWidth is how much of a description the listings show.
+const usageWidth = 100
 
 // Usage is the help text for the skill command. A tool that writes its own
 // help can print it, so that the two agree.
@@ -101,11 +105,15 @@ func usageTrimLines(s string) string {
 //
 //declscope:package // the skill listing in cli.go prints descriptions too
 func usageFirstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
+	if i := strings.IndexAny(s, "\n\r"); i >= 0 {
 		s = s[:i]
 	}
-	if len(s) > 100 {
-		return s[:97] + "..."
+	// A tab would be read as a column separator by the tabwriter this feeds.
+	s = strings.ReplaceAll(s, "\t", " ")
+	// Counted in runes, and cut on a rune boundary. Bytes would cut a CJK
+	// description at a third of the length, and in the middle of a character.
+	if utf8.RuneCountInString(s) > usageWidth {
+		return string([]rune(s)[:usageWidth-3]) + "..."
 	}
 	return s
 }

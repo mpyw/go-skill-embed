@@ -73,6 +73,21 @@ and `skillfs.Write` skip them, because an installed skill sits where a file
 browser can reach it. Before that, opening `~/.claude/skills/<name>` in Finder
 made the skill read as `modified` and install refuse without `--force`.
 
+**Refusing the whole run when one destination needs `--force`.** One `foreign`
+directory stopped every other skill from installing anywhere, and the refusal
+came back as an error string with the results thrown away. `Uninstall` had
+always reported the same situation per skill, as `ActionSkipped` with a
+`Reason`. `Install` now does too, and the error wraps `ErrNeedsForce`. Both
+verbs return results that mean something even when the error is not nil, and
+every front end prints them before returning it.
+
+**Letting a `Digest` error out of `inspect`.** A symlink inside an installed
+skill, which is a thing a user does, made `Status` fail. `Install` and
+`Uninstall` both call `Status` first, so `--force` failed too and the only way
+out was `rm -rf`. One such directory took every other skill at that target with
+it. An unreadable copy now reads as `foreign`: nothing can be said about what
+is there, so nothing is claimed.
+
 ## Things that look wrong but are not
 
 The `replace` directives in the adapter modules point at `../`. Go ignores a

@@ -15,7 +15,3 @@ const (
 	// StateForeign means something else owns a skill of that name there.
 	StateForeign State = "foreign"
 )
-
-// NeedsForce reports whether overwriting this state would destroy work that
-// this tool did not create.
-func (s State) NeedsForce() bool { return s == StateModified || s == StateForeign }

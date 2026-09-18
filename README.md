@@ -184,8 +184,25 @@ copy and its embedded original hash the same.
 | `missing` | Nothing is there | Writes it |
 | `up-to-date` | The installed copy matches | Skips it |
 | `outdated` | Your binary carries a newer copy | Overwrites it |
-| `modified` | The user edited it after installing | Refuses without `--force` |
-| `foreign` | Another tool owns that name | Refuses without `--force` |
+| `modified` | The user edited it after installing | Skips it, and reports `ErrNeedsForce` |
+| `foreign` | Something else owns that name, or the copy cannot be read | Skips it, and reports `ErrNeedsForce` |
+
+A skipped skill does not stop the others. `Install` writes everything it can,
+returns one `InstallResult` per skill either way, and returns an error wrapping
+`ErrNeedsForce` when it left anything alone. The results are meaningful even
+when the error is not.
+
+```go
+results, err := skills.Install(o)
+report(results)
+if errors.Is(err, skillembed.ErrNeedsForce) {
+	// tell the user to re-run with --force
+}
+```
+
+`foreign` also covers a directory this tool cannot read, such as one holding a
+symlink. Nothing can be said about what is there, so nothing is claimed, and
+`--force` remains the way through.
 
 > [!WARNING]
 > `WithMetadata(false)` turns the four keys off. Install can then no longer
@@ -281,7 +298,7 @@ app := &cli.Command{
 `Run` never calls `os.Exit`, so a driver keeps control.
 
 ```go
-err := skills.Install(skillembed.InstallOptions{
+results, err := skills.Install(skillembed.InstallOptions{
 	Agents: []string{"claude-code"},
 	Scope:  "user",
 })

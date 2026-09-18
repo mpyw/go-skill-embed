@@ -150,12 +150,14 @@ func (in *Installer) cliInstall(args []string) error {
 	if err != nil {
 		return err
 	}
-	results, err := in.Install(o)
-	if err != nil {
+	// Report first. Install and Uninstall describe everything they did before
+	// the error, and a run that wrote three skills and refused a fourth should
+	// say so.
+	results, runErr := in.Install(o)
+	if _, err := io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun)); err != nil {
 		return err
 	}
-	_, err = io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun))
-	return err
+	return runErr
 }
 
 func (in *Installer) cliUninstall(args []string) error {
@@ -163,12 +165,11 @@ func (in *Installer) cliUninstall(args []string) error {
 	if err != nil {
 		return err
 	}
-	results, err := in.Uninstall(o)
-	if err != nil {
+	results, runErr := in.Uninstall(o)
+	if _, err := io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun)); err != nil {
 		return err
 	}
-	_, err = io.WriteString(in.Output(), RenderCLIResults(results, o.DryRun))
-	return err
+	return runErr
 }
 
 func (in *Installer) cliList(args []string) error {

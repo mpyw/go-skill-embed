@@ -81,11 +81,13 @@ func (s *SkillSet) Len() int {
 // SkillsFromFS discovers skills under root using the `<root>/*/SKILL.md` convention.
 // If root itself holds a SKILL.md it is read as a single skill.
 //
-// Embed the directory with the all: prefix, or dotfiles inside the skill are
-// silently left out:
-//
-//	//go:embed all:skills
+//	//go:embed skills
 //	var skillsFS embed.FS
+//
+// A bare //go:embed leaves out every file whose name begins with a dot or an
+// underscore, and says nothing about it. Write all:skills when a skill holds
+// one. A skill carrying a file an operating system left behind, such as
+// .DS_Store, is refused either way.
 func SkillsFromFS(fsys fs.FS, root string) (*SkillSet, error) {
 	if root == "" {
 		root = "."
