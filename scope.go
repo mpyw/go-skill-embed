@@ -1,6 +1,9 @@
 package skillembed
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Scope selects where skills are installed.
 type Scope string
@@ -12,6 +15,9 @@ const (
 	ScopeUser Scope = "user"
 )
 
+// ErrUnknownScope reports a --scope value that is neither project nor user.
+var ErrUnknownScope = errors.New("skillembed: unknown scope")
+
 // ParseScope validates a scope name.
 func ParseScope(s string) (Scope, error) {
 	switch Scope(s) {
@@ -20,5 +26,5 @@ func ParseScope(s string) (Scope, error) {
 	case ScopeUser:
 		return ScopeUser, nil
 	}
-	return "", fmt.Errorf("unknown scope %q (want %s or %s)", s, ScopeProject, ScopeUser)
+	return "", fmt.Errorf("%w %q (want %s or %s)", ErrUnknownScope, s, ScopeProject, ScopeUser)
 }

@@ -122,8 +122,8 @@ Flags:
   -f	Overwrite existing skills (shorthand)
   -force
     	Overwrite existing skills
-  -scope string
-    	Installation scope: {project|user} (default "project")
+  -scope value
+    	Installation scope: {project|user} (default project)
 
 ```
 

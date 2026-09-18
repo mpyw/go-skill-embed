@@ -74,12 +74,28 @@ func list(in *skillembed.Installer) *cobra.Command {
 	return cmd
 }
 
+// scopeValue binds cobra's string flag to the typed Scope.
+type scopeValue struct{ dest *skillembed.Scope }
+
+func (s scopeValue) String() string { return string(*s.dest) }
+func (scopeValue) Type() string     { return "string" }
+
+func (s scopeValue) Set(v string) error {
+	scope, err := skillembed.ParseScope(v)
+	if err != nil {
+		return err
+	}
+	*s.dest = scope
+	return nil
+}
+
 // bind registers the flags shared by every subcommand.
 func bind(cmd *cobra.Command, in *skillembed.Installer, o *skillembed.InstallOptions) {
+	o.Scope = in.DefaultScope()
 	f := cmd.Flags()
 	f.StringSliceVar(&o.Agents, "agent", nil, "Target agent: "+in.AgentChoices()+", or all, or detected")
 	f.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides --agent and --scope)")
-	f.StringVar(&o.Scope, "scope", string(in.DefaultScope()), "Installation scope: {project|user}")
+	f.Var(scopeValue{&o.Scope}, "scope", "Installation scope: {project|user}")
 	f.BoolVarP(&o.Force, "force", "f", false, "Overwrite existing skills")
 	f.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
 }

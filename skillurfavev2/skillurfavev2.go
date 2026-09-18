@@ -83,7 +83,7 @@ func flags(in *skillembed.Installer) []cli.Flag {
 func options(c *cli.Context) skillembed.InstallOptions {
 	return skillembed.InstallOptions{
 		Agents: c.StringSlice("agent"),
-		Scope:  c.String("scope"),
+		Scope:  skillembed.Scope(c.String("scope")),
 		Dir:    c.String("dir"),
 		Force:  c.Bool("force"),
 		DryRun: c.Bool("dry-run"),

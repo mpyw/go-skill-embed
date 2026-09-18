@@ -160,8 +160,8 @@ func (in *Installer) DefaultAgentNames() []string { return append([]string(nil),
 type InstallOptions struct {
 	// Agents are agent names, or "all". Empty means the installer default.
 	Agents []string
-	// Scope is "project" or "user". Empty means the installer default.
-	Scope string
+	// Scope is ScopeProject or ScopeUser. Empty means the installer default.
+	Scope Scope
 	// Dir installs into a directory of your choosing, overriding Agents and Scope.
 	Dir string
 	// Force overwrites skills that were edited, or that something else installed.
@@ -197,21 +197,26 @@ func (t InstallTarget) Label() string {
 // At project scope every agent but Claude Code shares .agents/skills, so those
 // are merged into one target and a skill is never written there twice.
 func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
+	// Validate before Dir wins, so that a bad --scope or --agent alongside it
+	// is a diagnosis rather than silence.
+	scope := in.defaultScope
+	if o.Scope != "" {
+		s, err := ParseScope(string(o.Scope))
+		if err != nil {
+			return nil, err
+		}
+		scope = s
+	}
+
 	if o.Dir != "" {
 		abs, err := filepath.Abs(o.Dir)
 		if err != nil {
 			return nil, err
 		}
-		return []InstallTarget{{Dir: abs}}, nil
-	}
-
-	scope := in.defaultScope
-	if o.Scope != "" {
-		s, err := ParseScope(o.Scope)
-		if err != nil {
+		if _, err := agentsByName(in.agents, o.Agents, func(Agent) bool { return true }); err != nil {
 			return nil, err
 		}
-		scope = s
+		return []InstallTarget{{Dir: abs}}, nil
 	}
 
 	names := o.Agents
@@ -235,7 +240,7 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 	}
 	agents = agentsFallBackToAll(in.agents, agents, names)
 	if len(agents) == 0 {
-		return nil, errors.New("no agent selected")
+		return nil, ErrNoAgentSelected
 	}
 
 	var targets []InstallTarget
@@ -270,7 +275,7 @@ func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
 		if !ok {
 			available := in.set.Names()
 			sort.Strings(available)
-			return nil, fmt.Errorf("unknown skill %q (embedded: %s)", name, strings.Join(available, ", "))
+			return nil, fmt.Errorf("%w %q (embedded: %s)", ErrUnknownSkill, name, strings.Join(available, ", "))
 		}
 		out = append(out, sk)
 	}
@@ -279,8 +284,9 @@ func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
 
 // InstallStatus is the state of one skill at one destination.
 type InstallStatus struct {
-	Skill         Skill
-	InstallTarget InstallTarget
+	Skill Skill
+	// Target is the destination this row is about.
+	Target InstallTarget
 	// Path is the skill's own directory inside InstallTarget.Dir.
 	Path  string
 	State State
@@ -314,7 +320,7 @@ func (in *Installer) Status(o InstallOptions) ([]InstallStatus, error) {
 
 func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 	dest := filepath.Join(t.Dir, sk.Name)
-	st := InstallStatus{Skill: sk, InstallTarget: t, Path: dest, State: StateMissing}
+	st := InstallStatus{Skill: sk, Target: t, Path: dest, State: StateMissing}
 
 	info, err := os.Stat(dest)
 	if err != nil {
@@ -366,9 +372,10 @@ func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 
 // InstallResult is the outcome for one skill at one target.
 type InstallResult struct {
-	Skill         Skill
-	InstallTarget InstallTarget
-	Path          string
+	Skill Skill
+	// Target is the destination this row is about.
+	Target InstallTarget
+	Path   string
 	// Before is the state found at Path.
 	Before State
 	Action Action
@@ -395,7 +402,7 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 	var blocked []InstallStatus
 	results := make([]InstallResult, 0, len(statuses))
 	for _, st := range statuses {
-		r := InstallResult{Skill: st.Skill, InstallTarget: st.InstallTarget, Path: st.Path, Before: st.State}
+		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
 		case st.State == StateModified && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
@@ -412,7 +419,7 @@ func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
 		}
 		if r.Action != ActionSkipped && !o.DryRun {
 			if err := in.write(st.Skill, st.Path); err != nil {
-				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.InstallTarget.Dir, err)
+				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
 			}
 		}
 		results = append(results, r)
@@ -434,7 +441,7 @@ func (in *Installer) Uninstall(o InstallOptions) ([]InstallResult, error) {
 	}
 	results := make([]InstallResult, 0, len(statuses))
 	for _, st := range statuses {
-		r := InstallResult{Skill: st.Skill, InstallTarget: st.InstallTarget, Path: st.Path, Before: st.State}
+		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
 		case st.State == StateMissing:
 			r.Action, r.Reason = ActionSkipped, "not installed"

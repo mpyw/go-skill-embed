@@ -456,3 +456,32 @@ func TestUnreadableInstallStaysRepairable(t *testing.T) {
 		t.Fatalf("forced uninstall failed: %v", err)
 	}
 }
+
+// A front end wants to map "you typed a bad value" to a different exit code
+// than "the disk is full", and so does a test.
+func TestErrorsAreMatchable(t *testing.T) {
+	in, root := newInstaller(t)
+	dest := filepath.Join(root, "skills")
+
+	for _, c := range []struct {
+		name string
+		opts skillembed.InstallOptions
+		want error
+	}{
+		{"unknown agent", skillembed.InstallOptions{Agents: []string{"nonsense"}}, skillembed.ErrUnknownAgent},
+		{"unknown scope", skillembed.InstallOptions{Scope: "nonsense"}, skillembed.ErrUnknownScope},
+		{"unknown skill", skillembed.InstallOptions{Dir: dest, Names: []string{"nonsense"}}, skillembed.ErrUnknownSkill},
+		{"nothing selected", skillembed.InstallOptions{Agents: []string{""}}, skillembed.ErrNoAgentSelected},
+		// Dir wins over agent and scope, but a bad value beside it is still a
+		// mistake, and saying nothing about it was the old behaviour.
+		{"dir with a bad scope", skillembed.InstallOptions{Dir: dest, Scope: "nonsense"}, skillembed.ErrUnknownScope},
+		{"dir with a bad agent", skillembed.InstallOptions{Dir: dest, Agents: []string{"nonsense"}}, skillembed.ErrUnknownAgent},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := in.Status(c.opts)
+			if !errors.Is(err, c.want) {
+				t.Errorf("err = %v, want it to wrap %v", err, c.want)
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package skillembed
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -14,6 +15,9 @@ import (
 // SkillFile is the manifest every skill directory must contain, as defined by
 // the Agent Skills specification (https://agentskills.io/specification).
 const SkillFile = manifest.FileName
+
+// ErrUnknownSkill reports a name that matches no embedded skill.
+var ErrUnknownSkill = errors.New("skillembed: unknown skill")
 
 // Skill is one embedded skill directory.
 type Skill struct {

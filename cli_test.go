@@ -101,9 +101,9 @@ func TestSubcommandHelp(t *testing.T) {
 	for _, want := range []string{
 		"Install the agent skills embedded in testtool.",
 		"  testtool skill install [flags] [skill...]",
-		"  -agent value",  // one dash, as a flag package tool prints
-		"  -scope string", //
-		`(default "project")`,
+		"  -agent value", // one dash, as a flag package tool prints
+		"  -scope value", // a flag.Value, like -agent
+		"(default project)",
 		"demo-skill",
 	} {
 		if !strings.Contains(help, want) {

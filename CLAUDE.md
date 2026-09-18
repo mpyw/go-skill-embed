@@ -128,3 +128,27 @@ example could not assert the help text until they were gone.
 over an in-memory buffer. errcheck's default exclusions cover `bytes.Buffer`
 and `os.Stderr` but not `tabwriter`. The write that can actually fail is the
 one to the real writer, and that one is checked.
+
+## Known and left alone
+
+An adversarial review raised these. They are recorded so the next reader does
+not raise them again.
+
+The threat model is the reason. Whoever can write to the skills directory is
+almost always the person running the tool, and what breaks is their own
+`~/.claude/skills`. Each of these needs the user to work against themselves,
+and none of them corrupts anything they did not touch.
+
+| | |
+| --- | --- |
+| Concurrent installs into one directory | Six of eight raced runs fail on the rename. No corruption, and the last one wins |
+| A killed run leaves `.<name>.tmp-*` behind | Nothing picks it up. The leading dot keeps it out of the agents' way |
+| A `SKILL.md` that is a fifo or `/dev/zero` | `inspect` reads it without a size or type guard, so it hangs or grows without bound |
+| Extra `x-embedded-at` lines carry arbitrary text | `Strip` drops every injected key before hashing, so the digest cannot see them |
+| The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
+| A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
+| `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |
+| `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it |
+| `InstallOptions.Names` is not deduplicated | Naming a skill twice writes it twice |
+| A BOM moves into the body | Only when `With` creates a frontmatter block that was not there |
+| `quote` and `unquote` are asymmetric | A tool name holding a quote or a backslash never reads back, so the skill stays `foreign` |

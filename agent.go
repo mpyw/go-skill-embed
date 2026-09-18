@@ -1,6 +1,7 @@
 package skillembed
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -154,6 +155,13 @@ func agentChoices(agents []Agent) string {
 	return "{" + strings.Join(names, "|") + "}"
 }
 
+// ErrUnknownAgent reports an --agent value that names no agent this tool
+// offers. A front end can map it to a usage exit code.
+var ErrUnknownAgent = errors.New("skillembed: unknown agent")
+
+// ErrNoAgentSelected reports that the values resolved to nothing at all.
+var ErrNoAgentSelected = errors.New("skillembed: no agent selected")
+
 // agentsByName maps --agent values to agents.
 //
 // "all" expands to every agent the installer offers. "detected" keeps the ones
@@ -196,7 +204,8 @@ func agentsByName(known []Agent, values []string, detected func(Agent) bool) ([]
 					valid = append(valid, k.Name)
 				}
 				sort.Strings(valid)
-				return nil, fmt.Errorf("unknown agent %q (want one of %s, or all, or detected)", name, strings.Join(valid, ", "))
+				return nil, fmt.Errorf("%w %q (want one of %s, or all, or detected)",
+					ErrUnknownAgent, name, strings.Join(valid, ", "))
 			}
 			if !seen[a.Name] {
 				seen[a.Name] = true

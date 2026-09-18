@@ -111,13 +111,34 @@ func (r cliRepeatable) Set(v string) error {
 	return nil
 }
 
+// cliScope binds the typed Scope to a string flag.
+type cliScope struct{ dest *Scope }
+
+// String is called on a zero value to decide whether a default is worth
+// printing, so it has to survive a nil destination.
+func (s cliScope) String() string {
+	if s.dest == nil {
+		return ""
+	}
+	return string(*s.dest)
+}
+
+func (s cliScope) Set(v string) error {
+	scope, err := ParseScope(v)
+	if err != nil {
+		return err
+	}
+	*s.dest = scope
+	return nil
+}
+
 // bindCLIFlags registers the flags `gh skill install` defines, so the two read
 // the same way.
 func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
 		in.AgentChoices(), strings.Join(in.DefaultAgentNames(), ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
-	fs.StringVar(&o.Scope, "scope", string(in.DefaultScope()), "Installation scope: {project|user}")
+	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
 	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
 	fs.BoolVar(&o.Force, "f", false, "Overwrite existing skills (shorthand)")
 	fs.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
@@ -136,7 +157,7 @@ func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet 
 }
 
 func (in *Installer) parseCLIOptions(sub string, args []string) (InstallOptions, error) {
-	var o InstallOptions
+	o := InstallOptions{Scope: in.DefaultScope()}
 	fs := in.newCLIFlagSet(sub, &o)
 	if err := fs.Parse(args); err != nil {
 		return o, err

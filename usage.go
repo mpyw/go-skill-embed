@@ -15,7 +15,7 @@ const usageWidth = 100
 // Usage is the help text for the skill command. A tool that writes its own
 // help can print it, so that the two agree.
 func (in *Installer) Usage() string {
-	var o InstallOptions
+	o := InstallOptions{Scope: in.DefaultScope()}
 	return in.usageFor("", in.newCLIFlagSet("", &o))
 }
 
