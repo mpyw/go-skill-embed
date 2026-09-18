@@ -89,3 +89,36 @@ func TestVettool(t *testing.T) {
 		t.Errorf("go vet -vettool exited %d:\n%s", code, out)
 	}
 }
+
+// Uninstall through the real binary. Intercept exits the process itself, so
+// this is the only place the destructive path runs the way a user meets it,
+// and --dir is the only thing that says where it deletes from.
+func TestSkillUninstall(t *testing.T) {
+	bin := build(t)
+	dest := filepath.Join(t.TempDir(), "skills")
+
+	out, code := run(t, bin, "skill", "install", "--dir", dest)
+	if code != 0 {
+		t.Fatalf("install exited %d:\n%s", code, out)
+	}
+
+	out, code = run(t, bin, "skill", "remove", "--dir", dest)
+	if code != 0 {
+		t.Fatalf("remove exited %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "removed") {
+		t.Errorf("remove said:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "example-adoption")); err == nil {
+		t.Error("the skill survived remove --dir")
+	}
+
+	// Removing what is no longer there is a skip, not a failure.
+	out, code = run(t, bin, "skill", "uninstall", "--dir", dest)
+	if code != 0 {
+		t.Fatalf("a second uninstall exited %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "not installed") {
+		t.Errorf("a second uninstall said:\n%s", out)
+	}
+}

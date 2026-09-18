@@ -1,6 +1,7 @@
 package skillembed_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,5 +76,102 @@ func TestClaudeConfigDirIsHonoured(t *testing.T) {
 	}
 	if want := filepath.Join(root, "skills"); dir != want {
 		t.Errorf("user dir = %q, want %q", dir, want)
+	}
+}
+
+// Dir is asked for a directory before anything is written to it. Every answer
+// it cannot give has to be an error, because an empty path joined with a skill
+// name is a relative directory in the working directory.
+func TestAgentDirRefusesWhatItCannotResolve(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		agent skillembed.Agent
+		scope skillembed.Scope
+		want  string
+	}{
+		{"unknown scope", skillembed.AgentClaudeCode, "nonsense", `unknown scope "nonsense"`},
+		{"no scope at all", skillembed.AgentClaudeCode, "", `unknown scope ""`},
+		{"no user directory", skillembed.Agent{Name: "custom", ProjectDir: "x"}, skillembed.ScopeUser,
+			"agent custom has no user scope directory"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir, err := c.agent.Dir(c.scope, t.TempDir())
+			if err == nil {
+				t.Fatalf("Dir(%q) = %q, want an error", c.scope, dir)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("err = %v, want it to say %q", err, c.want)
+			}
+			if dir != "" {
+				t.Errorf("Dir returned %q alongside an error", dir)
+			}
+		})
+	}
+}
+
+// An empty project root means the working directory. Returning a relative path
+// instead would install into whatever directory the tool happened to be run
+// from later.
+func TestAgentProjectDirDefaultsToTheWorkingDirectory(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := skillembed.AgentClaudeCode.Dir(skillembed.ScopeProject, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(wd, ".claude", "skills"); dir != want {
+		t.Errorf("Dir = %q, want %q", dir, want)
+	}
+	if !filepath.IsAbs(dir) {
+		t.Errorf("Dir = %q, want an absolute path", dir)
+	}
+}
+
+// User scope is the home directory, and a machine without one cannot be
+// guessed at. Falling back to a relative path would write .copilot/skills into
+// the working directory.
+func TestAgentUserDirNeedsAHomeDirectory(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	for _, a := range skillembed.DefaultAgents() {
+		dir, err := a.Dir(skillembed.ScopeUser, "")
+		if err == nil {
+			t.Errorf("%s user dir = %q with no home directory, want an error", a.Name, dir)
+		}
+	}
+}
+
+// CLAUDE_CONFIG_DIR may hold several roots separated the way PATH is. Joining
+// the whole value would produce one directory with a separator in its name.
+func TestAgentClaudeConfigDirTakesTheFirstRoot(t *testing.T) {
+	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+
+	for _, c := range []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"one root", first, filepath.Join(first, "skills")},
+		{"several roots", first + string(filepath.ListSeparator) + second, filepath.Join(first, "skills")},
+		// Nothing usable in the variable is the same as not setting it.
+		{"empty", "", filepath.Join(home, ".claude", "skills")},
+		{"whitespace", "   ", filepath.Join(home, ".claude", "skills")},
+		{"an empty first root", string(filepath.ListSeparator) + second, filepath.Join(home, ".claude", "skills")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_CONFIG_DIR", c.value)
+			dir, err := skillembed.AgentClaudeCode.Dir(skillembed.ScopeUser, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dir != c.want {
+				t.Errorf("Dir = %q, want %q", dir, c.want)
+			}
+		})
 	}
 }

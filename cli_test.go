@@ -171,3 +171,33 @@ func TestOutputAndErrorOutputAreSeparate(t *testing.T) {
 		t.Errorf("no usage on the error output:\n%s", errOut)
 	}
 }
+
+// Each subcommand's help is written out by hand, so the one place it can go
+// wrong is a heading copied from the command above it. Telling a user that
+// `uninstall` installs is worse than printing nothing.
+func TestSubcommandHelpSaysWhichSubcommand(t *testing.T) {
+	ctx := t.Context()
+
+	for _, c := range []struct {
+		sub, summary string
+	}{
+		{"install", "Install the agent skills embedded in testtool."},
+		{"uninstall", "Remove the agent skills embedded in testtool."},
+		{"list", "Show the agent skills embedded in testtool, and where each one stands."},
+	} {
+		t.Run(c.sub, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			in := newCLIInstaller(t, WithOutput(out))
+			if err := in.Run(ctx, []string{c.sub, "-h"}); !errors.Is(err, ErrHelp) {
+				t.Fatalf("Run(%s -h) = %v, want ErrHelp", c.sub, err)
+			}
+			help := out.String()
+			if !strings.HasPrefix(help, c.summary) {
+				t.Errorf("help opens with:\n%s\nwant %q", help, c.summary)
+			}
+			if want := "  testtool skill " + c.sub + " [flags] [skill...]"; !strings.Contains(help, want) {
+				t.Errorf("help is missing %q:\n%s", want, help)
+			}
+		})
+	}
+}

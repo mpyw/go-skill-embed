@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -552,5 +553,669 @@ func TestNamesDifferingOnlyInCaseAreRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "differ only in case") {
 		t.Errorf("error does not explain the collision: %v", err)
+	}
+}
+
+// installerFromFS builds an installer over a crafted file system, so that a
+// test can describe the skill it needs instead of adding a directory to
+// testdata that every other test then has to carry.
+func installerFromFS(t *testing.T, fsys fs.FS, root string, opts ...skillembed.InstallerOption) *skillembed.Installer {
+	t.Helper()
+	base := []skillembed.InstallerOption{
+		skillembed.WithToolName("testtool"),
+		skillembed.WithVersion("v1.0.0"),
+		skillembed.WithProjectRoot(t.TempDir()),
+		skillembed.WithOutput(&bytes.Buffer{}),
+	}
+	return skillembed.NewInstaller(skillembed.MustSkillsFromFS(fsys, root), append(base, opts...)...)
+}
+
+// Uninstall is the one destructive operation, and no front end test drove it.
+// The copy at project scope is the decoy: an uninstall that ignored --dir, or
+// bound it to the wrong option, deletes that one instead of the directory the
+// user named.
+func TestRunUninstallDeletesOnlyTheDirectoryNamed(t *testing.T) {
+	ctx := t.Context()
+	out := &bytes.Buffer{}
+	in, root := newInstaller(t, skillembed.WithOutput(out))
+	dest := filepath.Join(root, "custom")
+	decoy := filepath.Join(root, ".claude", "skills", "demo-skill")
+
+	if err := in.Run(ctx, []string{"install", "--dir", dest, "demo-skill"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.Run(ctx, []string{"install", "--agent", "claude-code", "demo-skill"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(decoy); err != nil {
+		t.Fatalf("the project scope copy was never written, so the test proves nothing: %v", err)
+	}
+
+	out.Reset()
+	if err := in.Run(ctx, []string{"uninstall", "--dir", dest, "demo-skill"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "removed") {
+		t.Errorf("uninstall said:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "demo-skill")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the skill survived uninstall --dir: %v", err)
+	}
+	if _, err := os.Stat(decoy); err != nil {
+		t.Errorf("uninstall --dir deleted from the agent directory instead: %v", err)
+	}
+
+	// Removing what is no longer there is a skip, not a failure.
+	out.Reset()
+	if err := in.Run(ctx, []string{"uninstall", "--dir", dest, "demo-skill"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "not installed") {
+		t.Errorf("a second uninstall said:\n%s", out)
+	}
+}
+
+// `remove` and `ls` are documented aliases. They have to reach the same code,
+// not a copy of it that drifts.
+func TestRunAliasesMatchTheirCommands(t *testing.T) {
+	ctx := t.Context()
+	out := &bytes.Buffer{}
+	in, root := newInstaller(t, skillembed.WithOutput(out))
+	dest := filepath.Join(root, "custom")
+
+	say := func(args ...string) string {
+		t.Helper()
+		out.Reset()
+		if err := in.Run(ctx, args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+
+	say("install", "--dir", dest)
+	if list, ls := say("list", "--dir", dest), say("ls", "--dir", dest); list != ls {
+		t.Errorf("ls said:\n%s\nlist said:\n%s", ls, list)
+	}
+
+	removed := say("remove", "--dir", dest)
+	if !strings.Contains(removed, "removed") {
+		t.Errorf("remove said:\n%s", removed)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "demo-skill")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("remove left the skill behind: %v", err)
+	}
+
+	say("install", "--dir", dest)
+	if uninstalled := say("uninstall", "--dir", dest); removed != uninstalled {
+		t.Errorf("remove said:\n%s\nuninstall said:\n%s", removed, uninstalled)
+	}
+}
+
+// --scope user has to land in the user's own directory and nowhere near the
+// project. HOME is a temporary directory here, so the test cannot reach the
+// developer's real ~/.claude even if the code does the wrong thing.
+func TestRunInstallsAtUserScope(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	ctx := t.Context()
+	out := &bytes.Buffer{}
+	in, root := newInstaller(t, skillembed.WithOutput(out), skillembed.WithAgents(skillembed.AgentClaudeCode))
+
+	if err := in.Run(ctx, []string{"install", "--scope", "user", "demo-skill"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "demo-skill", skillembed.SkillFile)); err != nil {
+		t.Fatalf("--scope user did not install into the home directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".claude")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("--scope user also wrote into the project: %v", err)
+	}
+
+	// A scope that is neither is reported rather than guessed at. The flag
+	// package renders the cause with %v, so only the text can be matched.
+	err := in.Run(ctx, []string{"install", "--scope", "nonsense", "demo-skill"})
+	if err == nil {
+		t.Fatal("--scope nonsense was accepted")
+	}
+	if !strings.Contains(err.Error(), "unknown scope") {
+		t.Errorf("err = %v, want it to name the unknown scope", err)
+	}
+}
+
+// WithMetadata(false) carries the README's WARNING. Without the frontmatter
+// there is nothing to compare against, so a skill this tool installed a moment
+// ago reads as foreign and every later install needs --force.
+func TestInstallWithoutMetadataReadsAsForeign(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t, skillembed.WithMetadata(false))
+	dest := filepath.Join(root, "skills")
+	opts := skillembed.InstallOptions{Dir: dest, Names: []string{"demo-skill"}}
+
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dest, "demo-skill", skillembed.SkillFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{
+		skillembed.MetaKeyEmbeddedBy,
+		skillembed.MetaKeyEmbeddedVersion,
+		skillembed.MetaKeyEmbeddedAt,
+		skillembed.MetaKeyEmbeddedDigest,
+	} {
+		if strings.Contains(string(body), key) {
+			t.Errorf("%s was written although metadata is off:\n%s", key, body)
+		}
+	}
+	// The skill itself still arrives intact.
+	if !strings.Contains(string(body), "Body text that must survive") {
+		t.Errorf("the skill was not copied:\n%s", body)
+	}
+
+	statuses, err := in.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statuses[0].State != skillembed.StateForeign {
+		t.Errorf("state = %s, want %s: without metadata nothing can be recognised",
+			statuses[0].State, skillembed.StateForeign)
+	}
+	if _, err := in.Install(ctx, opts); !errors.Is(err, skillembed.ErrNeedsForce) {
+		t.Errorf("a second install = %v, want it to need --force", err)
+	}
+	forced := opts
+	forced.Force = true
+	results, err := in.Install(ctx, forced)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].Action != skillembed.ActionUpdated {
+		t.Errorf("forced install = %s, want %s", results[0].Action, skillembed.ActionUpdated)
+	}
+}
+
+// WithExecutable carries the README's CAUTION: embed.FS drops file modes, so
+// the rule is the only thing that decides them. It replaces the shebang
+// default rather than adding to it, which is visible in both directions, and
+// the same rule decides whether an installation is still intact.
+func TestInstallExecutableRuleDecidesTheMode(t *testing.T) {
+	fsys := fstest.MapFS{
+		"skills/demo/SKILL.md":       &fstest.MapFile{Data: []byte("---\nname: demo\n---\n\n# Demo\n")},
+		"skills/demo/bin/tool":       &fstest.MapFile{Data: []byte("a program with no shebang\n")},
+		"skills/demo/scripts/run.sh": &fstest.MapFile{Data: []byte("#!/bin/sh\necho hi\n")},
+	}
+	rule := func(name string, _ []byte) bool { return name == "bin/tool" }
+
+	for _, c := range []struct {
+		name string
+		opts []skillembed.InstallerOption
+		want map[string]bool
+	}{
+		{"the default marks a shebang", nil,
+			map[string]bool{"bin/tool": false, "scripts/run.sh": true}},
+		{"a rule replaces the default", []skillembed.InstallerOption{skillembed.WithExecutable(rule)},
+			map[string]bool{"bin/tool": true, "scripts/run.sh": false}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := t.Context()
+			in := installerFromFS(t, fsys, "skills", c.opts...)
+			dest := filepath.Join(t.TempDir(), "skills")
+			opts := skillembed.InstallOptions{Dir: dest}
+
+			if _, err := in.Install(ctx, opts); err != nil {
+				t.Fatal(err)
+			}
+			for p, want := range c.want {
+				full := filepath.Join(dest, "demo", filepath.FromSlash(p))
+				info, err := os.Stat(full)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := info.Mode()&0o111 != 0; got != want {
+					t.Errorf("%s mode = %v, executable = %v, want %v", p, info.Mode(), got, want)
+				}
+			}
+
+			statuses, err := in.Status(ctx, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if statuses[0].State != skillembed.StateUpToDate {
+				t.Fatalf("state after install = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
+			}
+
+			// Flipping any file's bit away from what the rule asks for is
+			// noticed, and it is outdated rather than modified because nobody
+			// edited the contents.
+			for p, want := range c.want {
+				full := filepath.Join(dest, "demo", filepath.FromSlash(p))
+				flipped, restored := os.FileMode(0o755), os.FileMode(0o644)
+				if want {
+					flipped, restored = 0o644, 0o755
+				}
+				if err := os.Chmod(full, flipped); err != nil {
+					t.Fatal(err)
+				}
+				statuses, err := in.Status(ctx, opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if statuses[0].State != skillembed.StateOutdated {
+					t.Errorf("%s at mode %v: state = %s, want %s", p, flipped, statuses[0].State, skillembed.StateOutdated)
+				}
+				if err := os.Chmod(full, restored); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// Label is what every listing prints. A target built from --dir serves no
+// agent, and naming agents there would claim the skills went somewhere they
+// did not.
+func TestInstallTargetLabel(t *testing.T) {
+	in, root := newInstaller(t)
+
+	custom := filepath.Join(root, "custom")
+	targets, err := in.Targets(skillembed.InstallOptions{Dir: custom})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("--dir gave %d targets, want 1", len(targets))
+	}
+	if got := targets[0].Label(); got != custom {
+		t.Errorf("Label() = %q, want %q", got, custom)
+	}
+
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"claude-code", "codex"}, Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		filepath.Join(root, ".claude", "skills"): filepath.Join(root, ".claude", "skills") + " (Claude Code)",
+		filepath.Join(root, ".agents", "skills"): filepath.Join(root, ".agents", "skills") + " (Codex)",
+	}
+	if len(targets) != len(want) {
+		t.Fatalf("got %d targets, want %d", len(targets), len(want))
+	}
+	for _, tg := range targets {
+		if got := tg.Label(); got != want[tg.Dir] {
+			t.Errorf("Label() = %q, want %q", got, want[tg.Dir])
+		}
+	}
+}
+
+// WithAgents is the documented way to restrict what a tool offers. An agent
+// left out has to disappear from the help, from "all", from "detected" and
+// from the values --agent accepts, not just from one of them.
+func TestWithAgentsRestrictsWhatIsOffered(t *testing.T) {
+	in, root := newInstaller(t, skillembed.WithAgents(skillembed.AgentClaudeCode, skillembed.AgentCodex))
+	claude := filepath.Join(root, ".claude", "skills")
+	shared := filepath.Join(root, ".agents", "skills")
+
+	if got, want := in.AgentChoices(), "{claude-code|codex}"; got != want {
+		t.Errorf("AgentChoices() = %q, want %q", got, want)
+	}
+
+	// "all" and the "detected" fallback both mean the two that are offered.
+	for _, o := range []skillembed.InstallOptions{
+		{Agents: []string{"all"}, Scope: "project"},
+		{Scope: "project"},
+	} {
+		targets, err := in.Targets(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dirs := map[string]bool{}
+		for _, tg := range targets {
+			dirs[tg.Dir] = true
+		}
+		if len(dirs) != 2 || !dirs[claude] || !dirs[shared] {
+			t.Errorf("Targets(%+v) = %v, want %s and %s", o, dirs, claude, shared)
+		}
+	}
+
+	// An agent that was left out is no longer a value --agent accepts, and the
+	// complaint lists only what is on offer.
+	_, err := in.Targets(skillembed.InstallOptions{Agents: []string{"cursor"}, Scope: "project"})
+	if !errors.Is(err, skillembed.ErrUnknownAgent) {
+		t.Fatalf("err = %v, want it to wrap ErrUnknownAgent", err)
+	}
+	if !strings.Contains(err.Error(), "want one of claude-code, codex") {
+		t.Errorf("err = %v, want it to offer only the restricted agents", err)
+	}
+}
+
+// WithDefaultAgents is the documented way to match `gh skill install`, whose
+// default is github-copilot alone. It replaces "detected", so a project that
+// already has .claude must not pull Claude Code back in.
+func TestWithDefaultAgentsReplacesDetection(t *testing.T) {
+	in, root := newInstaller(t, skillembed.WithDefaultAgents("github-copilot"))
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := in.Targets(skillembed.InstallOptions{Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Dir != filepath.Join(root, ".agents", "skills") {
+		t.Fatalf("targets = %+v, want .agents/skills alone", targets)
+	}
+	if len(targets[0].Agents) != 1 || targets[0].Agents[0].Name != "github-copilot" {
+		t.Errorf("target serves %+v, want github-copilot alone", targets[0].Agents)
+	}
+
+	// --agent still wins over the default.
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"claude-code"}, Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Dir != filepath.Join(root, ".claude", "skills") {
+		t.Errorf("targets = %+v, want .claude/skills", targets)
+	}
+}
+
+// WithDefaultScope decides where a run with no --scope writes. HOME is a
+// temporary directory here, so a mistake cannot reach the real one.
+func TestWithDefaultScopeChangesWhereSkillsLand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	in, root := newInstaller(t,
+		skillembed.WithDefaultScope(skillembed.ScopeUser),
+		skillembed.WithAgents(skillembed.AgentClaudeCode))
+
+	if got := in.DefaultScope(); got != skillembed.ScopeUser {
+		t.Errorf("DefaultScope() = %q, want %q", got, skillembed.ScopeUser)
+	}
+	targets, err := in.Targets(skillembed.InstallOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(home, ".claude", "skills"); len(targets) != 1 || targets[0].Dir != want {
+		t.Fatalf("targets = %+v, want %s", targets, want)
+	}
+
+	// An explicit scope still wins over the default.
+	targets, err = in.Targets(skillembed.InstallOptions{Scope: skillembed.ScopeProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(root, ".claude", "skills"); len(targets) != 1 || targets[0].Dir != want {
+		t.Errorf("targets = %+v, want %s", targets, want)
+	}
+}
+
+// NeedsForce is the predicate a front end branches on to decide whether to
+// suggest --force. Answering yes for an outdated copy tells a user to force
+// what is simply out of date; answering no for a modified one loses their
+// edits. It has to agree with the states Install refuses to write over.
+func TestStateNeedsForce(t *testing.T) {
+	for _, c := range []struct {
+		state skillembed.State
+		want  bool
+	}{
+		{skillembed.StateMissing, false},
+		{skillembed.StateUpToDate, false},
+		{skillembed.StateOutdated, false},
+		{skillembed.StateModified, true},
+		{skillembed.StateForeign, true},
+	} {
+		if got := c.state.NeedsForce(); got != c.want {
+			t.Errorf("%s.NeedsForce() = %v, want %v", c.state, got, c.want)
+		}
+	}
+}
+
+// The message is all the user is left with when install refuses. It has to
+// name every destination, say what was found there, and say what to do next.
+func TestForceRequiredErrorMessage(t *testing.T) {
+	err := &skillembed.ForceRequiredError{Blocked: []skillembed.InstallStatus{
+		{Path: filepath.Join("one", "demo-skill"), State: skillembed.StateModified},
+		{Path: filepath.Join("two", "other-skill"), State: skillembed.StateForeign},
+	}}
+
+	msg := err.Error()
+	for _, want := range []string{
+		filepath.Join("one", "demo-skill"),
+		string(skillembed.StateModified),
+		filepath.Join("two", "other-skill"),
+		string(skillembed.StateForeign),
+		"--force",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the message does not mention %q:\n%s", want, msg)
+		}
+	}
+	if !errors.Is(err, skillembed.ErrNeedsForce) {
+		t.Error("the error does not unwrap to ErrNeedsForce")
+	}
+}
+
+// A skill name becomes a directory under the destination, so it is the one
+// piece of a crafted SKILL.md that could write outside it, or hide the skill
+// from the agent meant to read it. Everything here is refused while the set is
+// read, which is before anything could be written.
+func TestSkillNameRejections(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		dir      string
+		manifest string
+		want     string
+	}{
+		{name: "parent directory", manifest: "---\nname: ../evil\n---\n", want: "must not contain a path separator"},
+		{name: "windows separator", manifest: "---\nname: ..\\evil\n---\n", want: "must not contain a path separator"},
+		{name: "nested", manifest: "---\nname: a/b\n---\n", want: "must not contain a path separator"},
+		{name: "hidden", manifest: "---\nname: .hidden\n---\n", want: "must not start with a dot"},
+		{name: "dot", manifest: "---\nname: .\n---\n", want: `invalid skill name "."`},
+		{name: "dot dot", manifest: "---\nname: ..\n---\n", want: `invalid skill name ".."`},
+		// The name falls back to the directory, so the directory is crafted too.
+		{name: "hidden directory", dir: ".hidden", manifest: "no frontmatter at all\n", want: "must not start with a dot"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := c.dir
+			if dir == "" {
+				dir = "crafted"
+			}
+			fsys := fstest.MapFS{
+				"skills/" + dir + "/SKILL.md": &fstest.MapFile{Data: []byte(c.manifest)},
+			}
+			_, err := skillembed.SkillsFromFS(fsys, "skills")
+			if err == nil {
+				t.Fatalf("%q was accepted", c.manifest)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("err = %v, want it to say %q", err, c.want)
+			}
+			if !strings.Contains(err.Error(), "skills/"+dir) {
+				t.Errorf("err = %v, want it to name the skill it came from", err)
+			}
+		})
+	}
+
+	// A dot inside a name is not a dot at the front of one, and refusing it
+	// would be as wrong as accepting an escape.
+	fsys := fstest.MapFS{
+		"skills/ok/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: demo.v2\n---\n")},
+		// An empty name is no name, so the directory decides, exactly as a
+		// manifest with no name field does.
+		"skills/fallback/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: \"\"\n---\n")},
+	}
+	set, err := skillembed.SkillsFromFS(fsys, "skills")
+	if err != nil {
+		t.Fatalf("a name holding a dot was refused: %v", err)
+	}
+	for _, want := range []string{"demo.v2", "fallback"} {
+		if _, ok := set.Lookup(want); !ok {
+			t.Errorf("names = %v, want %s", set.Names(), want)
+		}
+	}
+
+	// A skill at the root of the file system has no directory name to fall
+	// back to, so it has to declare one. Without this the name would be ".",
+	// and the skill would be installed over its own destination directory.
+	_, err = skillembed.SkillsFromFS(fstest.MapFS{
+		"SKILL.md": &fstest.MapFile{Data: []byte("no frontmatter, so no name\n")},
+	}, "")
+	if err == nil {
+		t.Fatal("a root manifest with no name was accepted")
+	}
+	if !strings.Contains(err.Error(), `invalid skill name "."`) {
+		t.Errorf("err = %v, want it to refuse the name \".\"", err)
+	}
+}
+
+// Two directories declaring one name install over each other, and every run
+// would flip the contents while reporting success.
+func TestSkillsFromFSRejectsDuplicateNames(t *testing.T) {
+	fsys := fstest.MapFS{
+		"skills/first/SKILL.md":  &fstest.MapFile{Data: []byte("---\nname: demo\n---\nA\n")},
+		"skills/second/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: demo\n---\nB\n")},
+	}
+	_, err := skillembed.SkillsFromFS(fsys, "skills")
+	if err == nil {
+		t.Fatal("two skills of one name were accepted")
+	}
+	for _, want := range []string{"skills/first", "skills/second", `"demo"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to mention %q", err, want)
+		}
+	}
+}
+
+// An embed that reached no skill is a build-time mistake, and a set of nothing
+// would install nothing while reporting success.
+func TestSkillsFromFSNeedsASkill(t *testing.T) {
+	fsys := fstest.MapFS{
+		"skills/notes.md":      &fstest.MapFile{Data: []byte("not a skill\n")},
+		"skills/sub/README.md": &fstest.MapFile{Data: []byte("still not a skill\n")},
+		"elsewhere/x/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: x\n---\n")},
+	}
+	_, err := skillembed.SkillsFromFS(fsys, "skills")
+	if err == nil {
+		t.Fatal("a root holding no skill was accepted")
+	}
+	if !strings.Contains(err.Error(), "no SKILL.md found under skills") {
+		t.Errorf("err = %v, want it to say nothing was found", err)
+	}
+
+	// A root that is not there at all says which root it could not read.
+	_, err = skillembed.SkillsFromFS(fsys, "missing")
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("err = %v, want it to wrap fs.ErrNotExist", err)
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Errorf("err = %v, want it to name the root", err)
+	}
+}
+
+// A root that holds a SKILL.md of its own is one skill, whatever else the tree
+// holds. Reading it as a directory of skills instead would install its
+// subdirectories as separate skills and lose the manifest at the top.
+func TestSkillsFromFSReadsARootManifestAsOneSkill(t *testing.T) {
+	ctx := t.Context()
+	fsys := fstest.MapFS{
+		"SKILL.md":          &fstest.MapFile{Data: []byte("---\nname: solo\ndescription: The whole tree.\n---\n\n# Solo\n")},
+		"reference/tips.md": &fstest.MapFile{Data: []byte("tips\n")},
+		// A nested manifest is part of the one skill, not a skill of its own.
+		"nested/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: nested\n---\n")},
+	}
+
+	// An empty root means the top of the file system.
+	set, err := skillembed.SkillsFromFS(fsys, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Len() != 1 {
+		t.Fatalf("names = %v, want solo alone", set.Names())
+	}
+	sk, ok := set.Lookup("solo")
+	if !ok {
+		t.Fatalf("names = %v, want solo", set.Names())
+	}
+	if sk.Dir != "." {
+		t.Errorf("Dir = %q, want %q", sk.Dir, ".")
+	}
+	if sk.Description != "The whole tree." {
+		t.Errorf("Description = %q", sk.Description)
+	}
+
+	in := installerFromFS(t, fsys, "")
+	dest := filepath.Join(t.TempDir(), "skills")
+	opts := skillembed.InstallOptions{Dir: dest}
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"SKILL.md", "reference/tips.md", "nested/SKILL.md"} {
+		if _, err := os.Stat(filepath.Join(dest, "solo", filepath.FromSlash(p))); err != nil {
+			t.Errorf("%s did not come along: %v", p, err)
+		}
+	}
+	statuses, err := in.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statuses[0].State != skillembed.StateUpToDate {
+		t.Errorf("state after install = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
+	}
+}
+
+// MustSkillsFromFS is written at package level, where there is nobody to
+// return an error to. Returning nil instead of panicking would leave a tool
+// with a set of nothing, and every install would report success and write
+// nothing at all.
+func TestMustSkillsFromFSPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("a broken embed did not panic")
+		}
+		err, ok := r.(error)
+		if !ok {
+			t.Fatalf("recovered %T, want an error", r)
+		}
+		if !strings.Contains(err.Error(), "no SKILL.md found") {
+			t.Errorf("panic = %v, want it to say what is wrong", err)
+		}
+	}()
+	skillembed.MustSkillsFromFS(fstest.MapFS{"skills/notes.md": &fstest.MapFile{}}, "skills")
+}
+
+// A set that was never built is not a reason to crash inside somebody else's
+// tool. The accessors answer for a nil set, so a mistake reaches the user as
+// an empty listing rather than a panic in their main.
+func TestSkillSetWithoutSkills(t *testing.T) {
+	var set *skillembed.SkillSet
+
+	if n := set.Len(); n != 0 {
+		t.Errorf("Len() = %d, want 0", n)
+	}
+	if got := set.Skills(); got != nil {
+		t.Errorf("Skills() = %v, want nil", got)
+	}
+	if got := set.Names(); len(got) != 0 {
+		t.Errorf("Names() = %v, want none", got)
+	}
+	if _, ok := set.Lookup("demo-skill"); ok {
+		t.Error("Lookup found a skill in a set that holds none")
+	}
+
+	in := skillembed.NewInstaller(set, skillembed.WithToolName("testtool"), skillembed.WithProjectRoot(t.TempDir()))
+	if hint := in.UsageHint(); !strings.Contains(hint, "0 agent skills") {
+		t.Errorf("UsageHint() = %q, want it to say there are none", hint)
+	}
+	results, err := in.Install(t.Context(), skillembed.InstallOptions{Dir: filepath.Join(t.TempDir(), "skills")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Install wrote %+v from a set that holds nothing", results)
 	}
 }

@@ -2,6 +2,7 @@ package skillfs
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -190,5 +191,124 @@ func TestWriteLeavesTheOldTreeOnFailure(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".demo.") {
 			t.Errorf("a staging or aside directory was left behind: %s", e.Name())
 		}
+	}
+}
+
+// safeJoin is the last thing between a path inside an embedded skill and a
+// write outside the destination. embed.FS cannot produce one of these, but the
+// source is an fs.FS and anything may implement that, so the check is the
+// guarantee rather than the file system.
+func TestSafeJoinRejectsAnEscape(t *testing.T) {
+	root := t.TempDir()
+
+	for _, p := range []string{"..", "../evil", "../../evil", "a/../../evil", "/etc/passwd"} {
+		if got, err := safeJoin(root, p); err == nil {
+			t.Errorf("safeJoin(%q) = %q, want an error", p, got)
+		}
+	}
+	for _, c := range []struct{ in, want string }{
+		{".", root},
+		{"a.md", filepath.Join(root, "a.md")},
+		{"a/b/c.md", filepath.Join(root, "a", "b", "c.md")},
+		{"./a/../b.md", filepath.Join(root, "b.md")},
+	} {
+		got, err := safeJoin(root, c.in)
+		if err != nil {
+			t.Errorf("safeJoin(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("safeJoin(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Write has to consult it rather than trust the walk. A file system that names
+// a file "../evil" must not put one next to the destination.
+func TestWriteRefusesAnEscapingPath(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "demo")
+
+	err := Write(t.Context(), escapingFS{demoFS()}, dest, WriteOptions{})
+	if err == nil {
+		t.Fatal("a file named ../evil was written")
+	}
+	if !strings.Contains(err.Error(), "unsafe path") {
+		t.Errorf("err = %v, want it to name the unsafe path", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(parent, "evil")); statErr == nil {
+		t.Error("the file landed outside the destination")
+	}
+	// Nothing is left half written either.
+	if _, statErr := os.Stat(dest); statErr == nil {
+		t.Error("the destination was created by a refused write")
+	}
+}
+
+// escapingFS is a file system whose root directory names an entry that climbs
+// out of it. No real one does, which is the point: Write cannot assume it.
+type escapingFS struct{ fstest.MapFS }
+
+func (escapingFS) ReadDir(string) ([]fs.DirEntry, error) {
+	return []fs.DirEntry{escapingEntry{}}, nil
+}
+
+type escapingEntry struct{}
+
+func (escapingEntry) Name() string               { return "../evil" }
+func (escapingEntry) IsDir() bool                { return false }
+func (escapingEntry) Type() fs.FileMode          { return 0 }
+func (escapingEntry) Info() (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
+// The digest cannot see a mode, because an embedded file carries none. This is
+// the only check that notices a script which lost the bit it needs to run, and
+// the only one that would notice a file handed one it should not have.
+func TestExecutableBitsMatch(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	installed := os.DirFS(dest)
+
+	match := func(t *testing.T, rule func(string, []byte) bool) bool {
+		t.Helper()
+		ok, err := ExecutableBitsMatch(installed, rule)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+
+	if !match(t, HasShebang) {
+		t.Error("a freshly written tree does not match the rule that wrote it")
+	}
+	// No rule is a caller that does not care, not a caller that disagrees.
+	if !match(t, nil) {
+		t.Error("a nil rule reported a mismatch")
+	}
+
+	script := filepath.Join(dest, "scripts", "run.sh")
+	if err := os.Chmod(script, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if match(t, HasShebang) {
+		t.Error("a script that lost its executable bit went unnoticed")
+	}
+	if err := os.Chmod(script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// A bit the rule never asked for is a mismatch in the other direction.
+	if match(t, func(name string, _ []byte) bool { return name == "reference/tips.md" }) {
+		t.Error("a file carrying a bit the rule does not want went unnoticed")
+	}
+
+	// Junk is skipped here as everywhere else, so an executable .DS_Store
+	// dropped beside the skill does not make it look broken.
+	if err := os.WriteFile(filepath.Join(dest, ".DS_Store"), []byte("\x00\x01binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !match(t, HasShebang) {
+		t.Error("an executable .DS_Store was read as part of the skill")
 	}
 }
