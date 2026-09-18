@@ -167,10 +167,28 @@ func readSkill(fsys fs.FS, dir string) (Skill, error) {
 	if err != nil {
 		return Skill{}, err
 	}
+	if err := checkSkillContents(sub, dir); err != nil {
+		return Skill{}, err
+	}
 	if sk.digest, err = skillfs.Digest(sub); err != nil {
 		return Skill{}, err
 	}
 	return sk, nil
+}
+
+// checkSkillContents refuses a skill that carries a file an operating system
+// left behind. Installing is silent about them, because an installed directory
+// is one a user may open in a file browser. An embedded one is different: it
+// was committed, and it ships to everyone.
+func checkSkillContents(fsys fs.FS, dir string) error {
+	return fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !skillfs.IsJunk(p) {
+			return err
+		}
+		return fmt.Errorf("skillembed: %s was left behind by an operating system,"+
+			" and //go:embed all: took it along."+
+			" Remove the file, or embed without the all: prefix", path.Join(dir, p))
+	})
 }
 
 // checkSkillName rejects anything that could escape the destination directory

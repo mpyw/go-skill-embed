@@ -18,10 +18,10 @@ import (
 	skillembed "github.com/mpyw/go-skill-embed"
 )
 
-// all: keeps files whose names begin with a dot or an underscore, which a bare
-// //go:embed would drop without saying so.
+// This skill holds no file whose name begins with a dot or an underscore, so
+// the bare form is enough. all:skills is what to write when one does.
 //
-//go:embed all:skills
+//go:embed skills
 var skillsFS embed.FS
 
 var skills = skillembed.NewInstaller(

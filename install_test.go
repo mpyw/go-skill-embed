@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	skillembed "github.com/mpyw/go-skill-embed"
 )
 
-//go:embed all:testdata/skills
+//go:embed testdata/skills
 var installTestSkills embed.FS
 
 // newInstaller returns an installer whose every scope lands inside a temporary
@@ -303,5 +304,53 @@ func TestDefaultAgentDetects(t *testing.T) {
 	}
 	if len(targets) != 2 {
 		t.Errorf("all gave %d targets, want 2", len(targets))
+	}
+}
+
+// An embedded .DS_Store was committed and ships to everyone, so it is an error
+// rather than something to skip quietly.
+func TestEmbeddedJunkIsRejected(t *testing.T) {
+	fsys := fstest.MapFS{
+		"skills/demo/SKILL.md":  &fstest.MapFile{Data: []byte("---\nname: demo\n---\n")},
+		"skills/demo/.DS_Store": &fstest.MapFile{Data: []byte("\x00\x01binary")},
+	}
+
+	_, err := skillembed.SkillsFromFS(fsys, "skills")
+	if err == nil {
+		t.Fatal("a skill holding .DS_Store was accepted")
+	}
+	for _, want := range []string{"skills/demo/.DS_Store", "all:"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// The same file beside an installed skill is the file browser, not the user.
+func TestInstalledJunkIsIgnored(t *testing.T) {
+	in, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Dir: filepath.Join(root, "skills"), Names: []string{"demo-skill"}}
+
+	if _, err := in.Install(opts); err != nil {
+		t.Fatal(err)
+	}
+	junk := filepath.Join(root, "skills", "demo-skill", ".DS_Store")
+	if err := os.WriteFile(junk, []byte("\x00\x01binary"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	statuses, err := in.Status(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statuses[0].State != skillembed.StateUpToDate {
+		t.Errorf("state = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
+	}
+	results, err := in.Install(opts)
+	if err != nil {
+		t.Fatalf("install refused over a .DS_Store: %v", err)
+	}
+	if results[0].Action != skillembed.ActionSkipped {
+		t.Errorf("install = %s, want %s", results[0].Action, skillembed.ActionSkipped)
 	}
 }

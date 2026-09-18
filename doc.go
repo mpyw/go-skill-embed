@@ -6,12 +6,15 @@
 // a user who knows that command already knows this one.
 //
 // Skills live under skills/<name>/SKILL.md, which is the layout defined by the
-// Agent Skills specification (https://agentskills.io/specification). Embed the
-// directory with the all: prefix. A bare //go:embed drops every file whose
-// name begins with a dot or an underscore, and says nothing about it.
+// Agent Skills specification (https://agentskills.io/specification).
 //
-//	//go:embed all:skills
+//	//go:embed skills
 //	var skillsFS embed.FS
+//
+// A bare //go:embed drops every file whose name begins with a dot or an
+// underscore, and says nothing about it. Write all:skills when a skill holds
+// one. That form keeps everything, .DS_Store included, so SkillsFromFS refuses
+// a skill carrying a file an operating system left behind and names it.
 //
 //	var skills = skillembed.NewInstaller(
 //		skillembed.MustSkillsFromFS(skillsFS, "skills"),

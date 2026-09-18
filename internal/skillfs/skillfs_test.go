@@ -118,3 +118,37 @@ func TestWriteTransforms(t *testing.T) {
 		t.Errorf("Transform not applied:\n%s", got)
 	}
 }
+
+// A file browser leaves a .DS_Store beside an installed skill. That is not the
+// user editing the skill, so the digest must not move.
+func TestDigestIgnoresOperatingSystemJunk(t *testing.T) {
+	before, err := Digest(demoFS())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	littered := demoFS()
+	littered[".DS_Store"] = &fstest.MapFile{Data: []byte("\x00\x01binary")}
+	littered["reference/.DS_Store"] = &fstest.MapFile{Data: []byte("\x00\x01binary")}
+
+	after, err := Digest(littered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Errorf("a .DS_Store moved the digest:\n%s\n%s", before, after)
+	}
+}
+
+func TestWriteSkipsOperatingSystemJunk(t *testing.T) {
+	src := demoFS()
+	src[".DS_Store"] = &fstest.MapFile{Data: []byte("\x00\x01binary")}
+
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := Write(src, dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, ".DS_Store")); err == nil {
+		t.Error(".DS_Store was installed")
+	}
+}

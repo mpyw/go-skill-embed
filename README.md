@@ -29,7 +29,7 @@ import (
 	skillembed "github.com/mpyw/go-skill-embed"
 )
 
-//go:embed all:skills
+//go:embed skills
 var skillsFS embed.FS
 
 var skills = skillembed.NewInstaller(
@@ -45,9 +45,24 @@ func main() {
 ```
 
 > [!IMPORTANT]
-> Write `//go:embed all:skills`, not `//go:embed skills`.
-> A bare `//go:embed` drops every file whose name starts with `.` or `_`.
-> It does so silently.
+> The two forms of `//go:embed` are not the same, and neither is always right.
+>
+> | Written | Kept | Dropped |
+> | --- | --- | --- |
+> | `//go:embed skills` | Ordinary files | Every name starting with `.` or `_`, silently |
+> | `//go:embed all:skills` | Everything | Nothing, `.DS_Store` included |
+>
+> Write `all:` when a skill holds a file whose name starts with `.` or `_`.
+> Write the bare form otherwise.
+
+Either form is safe against the files an operating system leaves behind.
+`SkillsFromFS` refuses a skill holding `.DS_Store`, `Thumbs.db`, `desktop.ini`
+or `.localized`, and names the file. Those were committed, and they would ship
+to everyone.
+
+An installed skill is different. It sits in a directory a user may open in a
+file browser, so the same files are ignored there. A `.DS_Store` appearing
+beside an installed skill does not make it read as `modified`.
 
 ## Where skills go
 

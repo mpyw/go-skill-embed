@@ -15,7 +15,7 @@ import (
 	"github.com/mpyw/go-skill-embed/skillurfavev2"
 )
 
-//go:embed all:testdata/skills
+//go:embed testdata/skills
 var testSkills embed.FS
 
 func TestCommand(t *testing.T) {

@@ -11,10 +11,11 @@ import (
 	skillembed "github.com/mpyw/go-skill-embed"
 )
 
-// The all: prefix keeps files whose names begin with a dot or an underscore.
-// A bare //go:embed drops them, and says nothing about it.
+// These skills hold no file whose name begins with a dot or an underscore, so
+// the bare form is enough. Write all:testdata/skills when one does, since the
+// bare form drops them without a word.
 //
-//go:embed all:testdata/skills
+//go:embed testdata/skills
 var exampleSkills embed.FS
 
 func ExampleMustSkillsFromFS() {

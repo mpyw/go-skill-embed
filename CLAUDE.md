@@ -60,6 +60,19 @@ the working directory, `gh skill install --from-local` still wrote
 `.agents/skills`. The help's "auto-discovered" is about finding skills in a
 repository, not about finding agents.
 
+**Telling everyone to write `//go:embed all:skills`.** The bare form drops
+every name starting with a dot or an underscore and says nothing, which is why
+that advice was there. `all:` keeps `.DS_Store` too, and shipping one to every
+user is worse than dropping a file the author would notice missing. Neither
+form is right on its own, so the README states both and the library covers the
+case that cannot be caught by reading.
+
+Junk files are handled from two directions on purpose. `SkillsFromFS` refuses
+one, because an embedded `.DS_Store` was committed and ships. `skillfs.Digest`
+and `skillfs.Write` skip them, because an installed skill sits where a file
+browser can reach it. Before that, opening `~/.claude/skills/<name>` in Finder
+made the skill read as `modified` and install refuse without `--force`.
+
 ## Things that look wrong but are not
 
 The `replace` directives in the adapter modules point at `../`. Go ignores a

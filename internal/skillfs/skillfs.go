@@ -19,6 +19,22 @@ import (
 	"github.com/mpyw/go-skill-embed/internal/manifest"
 )
 
+// junkNames are files an operating system or a file browser leaves behind. A
+// skill author never writes one on purpose.
+var junkNames = map[string]bool{
+	".DS_Store":   true,
+	"Thumbs.db":   true,
+	"desktop.ini": true,
+	".localized":  true,
+}
+
+// IsJunk reports whether p is one ofJunkie those files.
+//
+// They are skipped on the way in and on the way out. An installed skill sits
+// in a directory a user may open in a file browser, and a .DS_Store appearing
+// beside it is not the user editing the skill.
+func IsJunk(p string) bool { return junkNames[path.Base(p)] }
+
 // Digest is the SHA-256 of a skill directory: every regular file's path, size
 // and contents, in path order.
 //
@@ -31,6 +47,9 @@ func Digest(fsys fs.FS) (string, error) {
 			return err
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if IsJunk(p) {
 			return nil
 		}
 		if !d.Type().IsRegular() {
@@ -93,6 +112,9 @@ func Write(src fs.FS, dest string, o WriteOptions) error {
 		}
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
+		}
+		if IsJunk(p) {
+			return nil
 		}
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("%s: not a regular file (%s)", p, d.Type())

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-//go:embed all:testdata/skills
+//go:embed testdata/skills
 var cliTestSkills embed.FS
 
 func newCLIInstaller(t *testing.T, opts ...InstallerOption) *Installer {
