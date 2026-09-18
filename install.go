@@ -22,23 +22,22 @@ type Installer struct {
 	version      string
 	commandName  string
 	defaultScope Scope
-	// Read by project.go, which searches for a root when this is empty.
-	//declscope:package
-	projectRoot string
-	metadata    bool
-	executable  func(name string, data []byte) bool
-	now         func() time.Time
+	metadata     bool
+	executable   func(name string, data []byte) bool
+	now          func() time.Time
 
-	// What the front end sees. cli.go, usage.go and agent.go read these to
-	// build help and to decide where to write. The fields above are
-	// install.go's own, and declscope reports it if one of them is read
-	// elsewhere.
+	// What another file reads. cli.go and usage.go build help and choose a
+	// writer, agent.go renders the agent choices, and project.go searches for
+	// a root when projectRoot is empty. The fields above are install.go's own,
+	// and declscope reports it if one of them is read elsewhere.
 	//declscope:package
 	set *SkillSet
 	//declscope:package
 	agents []Agent
 	//declscope:package
 	defaultAgent []AgentSelector
+	//declscope:package
+	projectRoot string
 	//declscope:package
 	out io.Writer
 	//declscope:package
