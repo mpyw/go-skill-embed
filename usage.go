@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"strings"
 	"text/tabwriter"
-	"unicode/utf8"
-)
 
-// usageWidth is how much of a description the listings show.
-const usageWidth = 100
+	"github.com/mpyw/go-skill-embed/internal/textfmt"
+)
 
 // Usage is the help text for the skill command. A tool that writes its own
 // help can print it, so that the two agree.
@@ -82,38 +79,8 @@ func (in *Installer) usageFor(sub string, fs *flag.FlagSet) string {
 
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	for _, sk := range in.set.Skills() {
-		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", sk.Name, usageFirstLine(sk.Description))
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", sk.Name, textfmt.FirstLine(sk.Description))
 	}
 	_ = tw.Flush()
-	return usageTrimLines(b.String())
-}
-
-// usageTrimLines removes the padding a tabwriter leaves at the end of a line
-// when the last column is empty. Nothing should print trailing whitespace, and
-// an Output comment in an example cannot carry it either.
-//
-//declscope:package // every rendered block goes through it, here and in cli.go
-func usageTrimLines(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
-	}
-	return strings.Join(lines, "\n")
-}
-
-// usageFirstLine shortens a description to one line that fits a table.
-//
-//declscope:package // the skill listing in cli.go prints descriptions too
-func usageFirstLine(s string) string {
-	if i := strings.IndexAny(s, "\n\r"); i >= 0 {
-		s = s[:i]
-	}
-	// A tab would be read as a column separator by the tabwriter this feeds.
-	s = strings.ReplaceAll(s, "\t", " ")
-	// Counted in runes, and cut on a rune boundary. Bytes would cut a CJK
-	// description at a third of the length, and in the middle of a character.
-	if utf8.RuneCountInString(s) > usageWidth {
-		return string([]rune(s)[:usageWidth-3]) + "..."
-	}
-	return s
+	return textfmt.TrimLines(b.String())
 }

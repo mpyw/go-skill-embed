@@ -23,14 +23,3 @@ const (
 //		},
 //	})
 func AgentSelectorFor(a Agent) AgentSelector { return AgentSelector(a.Name) }
-
-// agentSelectorNames renders selectors for a message or a default.
-//
-//declscope:package // cli.go joins the same values for the --agent help and default
-func agentSelectorNames(selectors []AgentSelector) []string {
-	out := make([]string, len(selectors))
-	for i, s := range selectors {
-		out[i] = string(s)
-	}
-	return out
-}

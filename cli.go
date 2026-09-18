@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/mpyw/go-skill-embed/internal/textfmt"
 )
 
 // ErrHelp is returned by Run when help was requested. It is not a failure.
@@ -102,7 +104,7 @@ func (r cliRepeatable) String() string {
 	if r.dest == nil {
 		return ""
 	}
-	return strings.Join(agentSelectorNames(*r.dest), ",")
+	return strings.Join(cliSelectorNames(*r.dest), ",")
 }
 
 func (r cliRepeatable) Set(v string) error {
@@ -116,6 +118,15 @@ func (in *Installer) cliOut() io.Writer {
 		return os.Stdout
 	}
 	return in.out
+}
+
+// cliSelectorNames renders selectors for the --agent help and its default.
+func cliSelectorNames(selectors []AgentSelector) []string {
+	out := make([]string, len(selectors))
+	for i, s := range selectors {
+		out[i] = string(s)
+	}
+	return out
 }
 
 // cliErrOut is where Run reports a mistake. It defaults to os.Stderr.
@@ -151,7 +162,7 @@ func (s cliScope) Set(v string) error {
 // the same way.
 func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
-		in.AgentChoices(), strings.Join(agentSelectorNames(in.defaultAgent), ",")))
+		in.AgentChoices(), strings.Join(cliSelectorNames(in.defaultAgent), ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
 	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
 	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
@@ -247,7 +258,7 @@ func RenderCLIStatus(statuses []InstallStatus) string {
 		seen[st.Skill.Name] = true
 		fmt.Fprintf(&b, "%s\n", st.Skill.Name)
 		if st.Skill.Description != "" {
-			fmt.Fprintf(&b, "  %s\n", usageFirstLine(st.Skill.Description))
+			fmt.Fprintf(&b, "  %s\n", textfmt.FirstLine(st.Skill.Description))
 		}
 	}
 	b.WriteByte('\n')
@@ -258,7 +269,7 @@ func RenderCLIStatus(statuses []InstallStatus) string {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", st.Skill.Name, st.State, st.Path)
 	}
 	_ = tw.Flush()
-	return usageTrimLines(b.String())
+	return textfmt.TrimLines(b.String())
 }
 
 // RenderCLIResults lists what install or uninstall did at each destination. The
@@ -278,5 +289,5 @@ func RenderCLIResults(results []InstallResult, dryRun bool) string {
 		_, _ = fmt.Fprintf(tw, "%s%s\t%s\t%s\n", prefix, r.Action, r.Skill.Name, r.Path+note)
 	}
 	_ = tw.Flush()
-	return usageTrimLines(b.String())
+	return textfmt.TrimLines(b.String())
 }
