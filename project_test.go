@@ -1,8 +1,10 @@
 package skillembed
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,4 +70,24 @@ func projectResolve(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// The refusal has to say which directory it refused and what to do instead.
+// Every other error in the package names the value it rejected, and a
+// refactor once left this one saying neither.
+func TestProjectIsHomeErrorIsActionable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	projectMkdir(t, filepath.Join(home, ".claude"))
+	t.Chdir(home)
+
+	_, err := NewInstaller(nil).projectRootOf(ScopeProject)
+	if !errors.Is(err, ErrProjectIsHome) {
+		t.Fatalf("err = %v, want ErrProjectIsHome", err)
+	}
+	for _, want := range []string{home, "--scope user", "--dir"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q: %v", want, err)
+		}
+	}
 }

@@ -1,6 +1,8 @@
 package skillembed
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -38,5 +40,15 @@ func (in *Installer) projectRootOf(scope Scope) (string, error) {
 			markers = append(markers, marker)
 		}
 	}
-	return projectroot.Find(wd, markers)
+	root, err := projectroot.Find(wd, markers)
+	if err != nil {
+		if errors.Is(err, ErrProjectIsHome) {
+			// The search says what happened and where. What to do about it is
+			// in this tool's vocabulary, which is not projectroot's to know.
+			return "", fmt.Errorf("skillembed: %w, so pass --scope user to write"+
+				" there on purpose or --dir to name another directory", err)
+		}
+		return "", err
+	}
+	return root, nil
 }

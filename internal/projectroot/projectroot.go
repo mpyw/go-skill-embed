@@ -6,6 +6,7 @@ package projectroot
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -49,7 +50,7 @@ func Find(dir string, markers []string) (string, error) {
 	}
 
 	if home, err := os.UserHomeDir(); err == nil && sameDir(chosen, home) {
-		return "", ErrIsHome
+		return "", fmt.Errorf("%w (%s)", ErrIsHome, chosen)
 	}
 	return chosen, nil
 }

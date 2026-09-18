@@ -244,6 +244,7 @@ and none of them corrupts anything they did not touch.
 | --- | --- |
 | Concurrent installs into one directory | Six of eight raced runs fail on the rename. No corruption, and the last one wins |
 | A killed run leaves `.<name>.tmp-*` or `.<name>.old-*` behind | Nothing picks either up. The leading dot keeps them out of the agents' way. A failed restore leaves one on purpose, and names it |
+| A container whose `HOME` is the repository root cannot install at project scope | The refusal cannot tell that shape from a real home directory. Weighed and kept: the refusal fails loudly and names the way out, and allowing it writes a project install into the user scope directory in silence. A devcontainer and a GitHub Actions runner both have a `HOME` above the repository. Neither reaches it. `skill install` is a developer's one-off rather than something CI runs |
 | `AgentSelectorFor` does not round trip a name holding a comma or spaces | Selectors are split on commas and trimmed. It needs a custom agent through `WithAgents` |
 | The adapters print no default for `--agent` | Each binds an empty slice, which cobra and urfave both read as "no default to show". The default used is the same in all four |
 | A `SKILL.md` that is a fifo or `/dev/zero` | `inspect` reads it without a size or type guard, so it hangs or grows without bound |
