@@ -85,13 +85,22 @@ func flags(in *skillembed.Installer) []cli.Flag {
 
 func options(c *cli.Context) skillembed.InstallOptions {
 	return skillembed.InstallOptions{
-		Agents: c.StringSlice("agent"),
+		Agents: agentSelectors(c.StringSlice("agent")),
 		Scope:  skillembed.Scope(c.String("scope")),
 		Dir:    c.String("dir"),
 		Force:  c.Bool("force"),
 		DryRun: c.Bool("dry-run"),
 		Names:  c.Args().Slice(),
 	}
+}
+
+// agentSelectors converts the framework's strings to the typed selector.
+func agentSelectors(values []string) []skillembed.AgentSelector {
+	out := make([]skillembed.AgentSelector, len(values))
+	for i, v := range values {
+		out[i] = skillembed.AgentSelector(v)
+	}
+	return out
 }
 
 func writer(c *cli.Context) io.Writer {

@@ -56,7 +56,7 @@ func TestSkillNameFallsBackToTheDirectory(t *testing.T) {
 func TestProjectScopeMergesTheSharedDirectory(t *testing.T) {
 	in, root := newInstaller(t)
 
-	targets, err := in.Targets(skillembed.InstallOptions{Agents: []string{"all"}, Scope: "project"})
+	targets, err := in.Targets(skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"all"}, Scope: "project"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestDefaultAgentDetects(t *testing.T) {
 	}
 
 	// "all" ignores what is present.
-	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"all"}, Scope: "project"})
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"all"}, Scope: "project"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,14 +478,14 @@ func TestErrorsAreMatchable(t *testing.T) {
 		opts skillembed.InstallOptions
 		want error
 	}{
-		{"unknown agent", skillembed.InstallOptions{Agents: []string{"nonsense"}}, skillembed.ErrUnknownAgent},
+		{"unknown agent", skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"nonsense"}}, skillembed.ErrUnknownAgent},
 		{"unknown scope", skillembed.InstallOptions{Scope: "nonsense"}, skillembed.ErrUnknownScope},
 		{"unknown skill", skillembed.InstallOptions{Dir: dest, Names: []string{"nonsense"}}, skillembed.ErrUnknownSkill},
-		{"nothing selected", skillembed.InstallOptions{Agents: []string{""}}, skillembed.ErrNoAgentSelected},
+		{"nothing selected", skillembed.InstallOptions{Agents: []skillembed.AgentSelector{""}}, skillembed.ErrNoAgentSelected},
 		// Dir wins over agent and scope, but a bad value beside it is still a
 		// mistake, and saying nothing about it was the old behaviour.
 		{"dir with a bad scope", skillembed.InstallOptions{Dir: dest, Scope: "nonsense"}, skillembed.ErrUnknownScope},
-		{"dir with a bad agent", skillembed.InstallOptions{Dir: dest, Agents: []string{"nonsense"}}, skillembed.ErrUnknownAgent},
+		{"dir with a bad agent", skillembed.InstallOptions{Dir: dest, Agents: []skillembed.AgentSelector{"nonsense"}}, skillembed.ErrUnknownAgent},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := in.Status(ctx, c.opts)
@@ -832,7 +832,7 @@ func TestInstallTargetLabel(t *testing.T) {
 		t.Errorf("Label() = %q, want %q", got, custom)
 	}
 
-	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"claude-code", "codex"}, Scope: "project"})
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code", "codex"}, Scope: "project"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -864,7 +864,7 @@ func TestWithAgentsRestrictsWhatIsOffered(t *testing.T) {
 
 	// "all" and the "detected" fallback both mean the two that are offered.
 	for _, o := range []skillembed.InstallOptions{
-		{Agents: []string{"all"}, Scope: "project"},
+		{Agents: []skillembed.AgentSelector{"all"}, Scope: "project"},
 		{Scope: "project"},
 	} {
 		targets, err := in.Targets(o)
@@ -882,7 +882,7 @@ func TestWithAgentsRestrictsWhatIsOffered(t *testing.T) {
 
 	// An agent that was left out is no longer a value --agent accepts, and the
 	// complaint lists only what is on offer.
-	_, err := in.Targets(skillembed.InstallOptions{Agents: []string{"cursor"}, Scope: "project"})
+	_, err := in.Targets(skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"cursor"}, Scope: "project"})
 	if !errors.Is(err, skillembed.ErrUnknownAgent) {
 		t.Fatalf("err = %v, want it to wrap ErrUnknownAgent", err)
 	}
@@ -912,7 +912,7 @@ func TestWithDefaultAgentsReplacesDetection(t *testing.T) {
 	}
 
 	// --agent still wins over the default.
-	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"claude-code"}, Scope: "project"})
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}, Scope: "project"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,7 +36,7 @@ type Installer struct {
 	//declscope:package
 	agents []Agent
 	//declscope:package
-	defaultAgent []string
+	defaultAgent []AgentSelector
 	//declscope:package
 	out io.Writer
 	//declscope:package
@@ -81,8 +81,8 @@ func WithAgents(agents ...Agent) InstallerOption {
 // default `gh skill install` uses.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
-func WithDefaultAgents(names ...string) InstallerOption {
-	return func(i *Installer) { i.defaultAgent = append([]string(nil), names...) }
+func WithDefaultAgents(selectors ...AgentSelector) InstallerOption {
+	return func(i *Installer) { i.defaultAgent = append([]AgentSelector(nil), selectors...) }
 }
 
 // WithDefaultScope sets the scope used when --scope is not given. It defaults
@@ -135,7 +135,7 @@ func NewInstaller(set *SkillSet, opts ...InstallerOption) *Installer {
 		set:          set,
 		commandName:  "skill",
 		agents:       DefaultAgents(),
-		defaultAgent: []string{"detected"},
+		defaultAgent: []AgentSelector{AgentSelectorDetected},
 		defaultScope: ScopeProject,
 		metadata:     true,
 		executable:   skillfs.HasShebang,
@@ -161,8 +161,8 @@ func (in *Installer) DefaultScope() Scope { return in.defaultScope }
 
 // InstallOptions are the inputs shared by install, uninstall and list.
 type InstallOptions struct {
-	// Agents are agent names, or "all". Empty means the installer default.
-	Agents []string
+	// Agents select the destinations. Empty means the installer default.
+	Agents []AgentSelector
 	// Scope is ScopeProject or ScopeUser. Empty means the installer default.
 	Scope Scope
 	// Dir installs into this directory, overriding Agents and Scope.

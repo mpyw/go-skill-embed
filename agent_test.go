@@ -1,6 +1,7 @@
 package skillembed_test
 
 import (
+	"embed"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,9 @@ import (
 
 	skillembed "github.com/mpyw/go-skill-embed"
 )
+
+//go:embed testdata/skills
+var agentTestSkills embed.FS
 
 // The built-in agents are this module's central data, taken from
 // `gh skill install --help`. A rename pass has already corrupted the titles
@@ -173,5 +177,54 @@ func TestAgentClaudeConfigDirTakesTheFirstRoot(t *testing.T) {
 				t.Errorf("Dir = %q, want %q", dir, c.want)
 			}
 		})
+	}
+}
+
+// A selector is an agent name or one of the two group words. The constants and
+// AgentSelectorFor are how a caller reaches both without writing a bare string.
+func TestAgentSelectorsReachEveryForm(t *testing.T) {
+	root := t.TempDir()
+	in := skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(agentTestSkills, "testdata/skills"),
+		skillembed.WithToolName("testtool"),
+		skillembed.WithProjectRoot(root),
+	)
+
+	for _, c := range []struct {
+		name      string
+		selectors []skillembed.AgentSelector
+		want      int
+	}{
+		{"one agent", []skillembed.AgentSelector{skillembed.AgentSelectorFor(skillembed.AgentClaudeCode)}, 1},
+		{"all", []skillembed.AgentSelector{skillembed.AgentSelectorAll}, 2},
+		{"detected falls back to all", []skillembed.AgentSelector{skillembed.AgentSelectorDetected}, 2},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			targets, err := in.Targets(skillembed.InstallOptions{Agents: c.selectors, Scope: skillembed.ScopeProject})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(targets) != c.want {
+				t.Errorf("got %d targets, want %d", len(targets), c.want)
+			}
+		})
+	}
+
+	if got := skillembed.AgentSelectorFor(skillembed.AgentClaudeCode); got != "claude-code" {
+		t.Errorf("AgentSelectorFor(AgentClaudeCode) = %q, want the agent's name", got)
+	}
+
+	// The default is a selector too, and replacing it replaces detection.
+	copilot := skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(agentTestSkills, "testdata/skills"),
+		skillembed.WithProjectRoot(root),
+		skillembed.WithDefaultAgents(skillembed.AgentSelectorFor(skillembed.AgentGitHubCopilot)),
+	)
+	targets, err := copilot.Targets(skillembed.InstallOptions{Scope: skillembed.ScopeProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || len(targets[0].Agents) != 1 || targets[0].Agents[0].Name != "github-copilot" {
+		t.Errorf("targets = %+v, want github-copilot alone", targets)
 	}
 }

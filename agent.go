@@ -131,12 +131,12 @@ func (in *Installer) AgentChoices() string { return agentChoices(in.agents) }
 // nothing would read as a failure.
 //
 //declscope:package // install.go applies it after resolving the agents
-func agentsFallBackToAll(known, resolved []Agent, values []string) []Agent {
+func agentsFallBackToAll(known, resolved []Agent, values []AgentSelector) []Agent {
 	if len(resolved) > 0 {
 		return resolved
 	}
 	for _, v := range values {
-		for _, name := range strings.Split(v, ",") {
+		for _, name := range strings.Split(string(v), ",") {
 			if strings.TrimSpace(name) == "detected" {
 				return known
 			}
@@ -168,7 +168,7 @@ var ErrNoAgentSelected = errors.New("skillembed: no agent selected")
 // so the command still does something on a machine with no agent set up.
 //
 //declscope:package // the command line's agent vocabulary, read by install.go
-func agentsByName(known []Agent, values []string, detected func(Agent) bool) ([]Agent, error) {
+func agentsByName(known []Agent, values []AgentSelector, detected func(Agent) bool) ([]Agent, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -179,14 +179,14 @@ func agentsByName(known []Agent, values []string, detected func(Agent) bool) ([]
 	var out []Agent
 	seen := map[string]bool{}
 	for _, v := range values {
-		for _, name := range strings.Split(v, ",") {
+		for _, name := range strings.Split(string(v), ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
 				continue
 			}
-			if name == "all" || name == "detected" {
+			if AgentSelector(name) == AgentSelectorAll || AgentSelector(name) == AgentSelectorDetected {
 				for _, a := range known {
-					if name == "detected" && detected != nil && !detected(a) {
+					if AgentSelector(name) == AgentSelectorDetected && detected != nil && !detected(a) {
 						continue
 					}
 					if !seen[a.Name] {

@@ -9,6 +9,7 @@ package skillcobra
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -80,6 +81,26 @@ func list(in *skillembed.Installer) *cobra.Command {
 	return cmd
 }
 
+// agentsValue binds cobra's repeatable string flag to the typed selector.
+type agentsValue struct{ dest *[]skillembed.AgentSelector }
+
+func (a agentsValue) String() string {
+	names := make([]string, len(*a.dest))
+	for i, s := range *a.dest {
+		names[i] = string(s)
+	}
+	return strings.Join(names, ",")
+}
+
+func (agentsValue) Type() string { return "strings" }
+
+func (a agentsValue) Set(v string) error {
+	for _, name := range strings.Split(v, ",") {
+		*a.dest = append(*a.dest, skillembed.AgentSelector(name))
+	}
+	return nil
+}
+
 // scopeValue binds cobra's string flag to the typed Scope.
 type scopeValue struct{ dest *skillembed.Scope }
 
@@ -99,7 +120,7 @@ func (s scopeValue) Set(v string) error {
 func bind(cmd *cobra.Command, in *skillembed.Installer, o *skillembed.InstallOptions) {
 	o.Scope = in.DefaultScope()
 	f := cmd.Flags()
-	f.StringSliceVar(&o.Agents, "agent", nil, "Target agent: "+in.AgentChoices()+", or all, or detected")
+	f.Var(agentsValue{&o.Agents}, "agent", "Target agent: "+in.AgentChoices()+", or all, or detected")
 	f.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides --agent and --scope)")
 	f.Var(scopeValue{&o.Scope}, "scope", "Installation scope: {project|user}")
 	f.BoolVarP(&o.Force, "force", "f", false, "Overwrite existing skills")

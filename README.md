@@ -87,10 +87,19 @@ them resolves to one directory. Each skill is written there once.
 
 `--agent` also takes two words.
 
-| Value | Meaning |
-| --- | --- |
-| `detected` | The agents whose directory is already there. The default |
-| `all` | Every agent, present or not |
+| Value | Constant | Meaning |
+| --- | --- | --- |
+| `detected` | `AgentSelectorDetected` | The agents whose directory is already there. The default |
+| `all` | `AgentSelectorAll` | Every agent, present or not |
+
+`InstallOptions.Agents` holds `AgentSelector` values. `AgentSelectorFor` names
+one agent, so a caller reaches every form without writing a bare string.
+
+```go
+Agents: []skillembed.AgentSelector{
+	skillembed.AgentSelectorFor(skillembed.AgentClaudeCode),
+}
+```
 
 `detected` falls back to `all` when it finds nothing, so a fresh repository
 still gets its skills. In a repository that already holds `.claude`, only

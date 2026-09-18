@@ -94,7 +94,7 @@ func (in *Installer) cliIntercept(ctx context.Context, argv []string) (handled b
 // cliRepeatable is a flag that may be given more than once, and that also
 // accepts a comma separated list. It appends straight into the options, so no
 // caller has to hold an intermediate slice.
-type cliRepeatable struct{ dest *[]string }
+type cliRepeatable struct{ dest *[]AgentSelector }
 
 // String is called on a zero value to decide whether a default is worth
 // printing, so it has to survive a nil destination.
@@ -102,11 +102,11 @@ func (r cliRepeatable) String() string {
 	if r.dest == nil {
 		return ""
 	}
-	return strings.Join(*r.dest, ",")
+	return strings.Join(agentSelectorNames(*r.dest), ",")
 }
 
 func (r cliRepeatable) Set(v string) error {
-	*r.dest = append(*r.dest, v)
+	*r.dest = append(*r.dest, AgentSelector(v))
 	return nil
 }
 
@@ -151,7 +151,7 @@ func (s cliScope) Set(v string) error {
 // the same way.
 func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
-		in.AgentChoices(), strings.Join(in.defaultAgent, ",")))
+		in.AgentChoices(), strings.Join(agentSelectorNames(in.defaultAgent), ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
 	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
 	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
