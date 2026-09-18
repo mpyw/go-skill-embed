@@ -92,25 +92,25 @@ var (
 	}
 	AgentCursor = Agent{
 		Name:       "cursor",
-		Title:      "AgentCursor",
+		Title:      "Cursor",
 		ProjectDir: sharedAgentProjectDir,
 		UserDir:    agentHomeDir(".cursor", "skills"),
 	}
 	AgentCodex = Agent{
 		Name:       "codex",
-		Title:      "AgentCodex",
+		Title:      "Codex",
 		ProjectDir: sharedAgentProjectDir,
 		UserDir:    agentHomeDir(".codex", "skills"),
 	}
 	AgentGemini = Agent{
 		Name:       "gemini",
-		Title:      "AgentGemini CLI",
+		Title:      "Gemini CLI",
 		ProjectDir: sharedAgentProjectDir,
 		UserDir:    agentHomeDir(".gemini", "skills"),
 	}
 	AgentAntigravity = Agent{
 		Name:       "antigravity",
-		Title:      "AgentAntigravity",
+		Title:      "Antigravity",
 		ProjectDir: sharedAgentProjectDir,
 		UserDir:    agentHomeDir(".gemini", "antigravity", "skills"),
 	}

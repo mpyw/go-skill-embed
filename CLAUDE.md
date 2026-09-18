@@ -104,7 +104,7 @@ linters. The rename that produced the current names reached doc comments as
 well as declarations, and left two of them starting with the wrong word.
 Nothing else in the standard set looks at that.
 
-`cliTrimLines` runs over every rendered block. A tabwriter pads the last
+`usageTrimLines` runs over every rendered block. A tabwriter pads the last
 column, so a skill with no description printed trailing spaces. Nothing should
 print those, and `gofmt` strips them from an `// Output:` comment, so an
 example could not assert the help text until they were gone.

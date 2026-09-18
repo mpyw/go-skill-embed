@@ -28,7 +28,7 @@ var junkNames = map[string]bool{
 	".localized":  true,
 }
 
-// IsJunk reports whether p is one ofJunkie those files.
+// IsJunk reports whether p is one of those files.
 //
 // They are skipped on the way in and on the way out. An installed skill sits
 // in a directory a user may open in a file browser, and a .DS_Store appearing

@@ -263,7 +263,7 @@ app := &cli.Command{
 | `WithVersion` | Empty | Recorded in `x-embedded-version` |
 | `WithCommandName` | `skill` | The subcommand `Run` and `Intercept` answer to |
 | `WithAgents` | All six | Restricts what `--agent` accepts |
-| `WithDefaultAgents` | `github-copilot` | Used when `--agent` is absent |
+| `WithDefaultAgents` | `detected` | Used when `--agent` is absent |
 | `WithDefaultScope` | `project` | Used when `--scope` is absent |
 | `WithProjectRoot` | The working directory | What project scope resolves against |
 | `WithMetadata` | On | Writes the four `x-embedded-*` keys |
