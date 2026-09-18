@@ -1,0 +1,17 @@
+# declscope gives this module pseudo visibility levels between exported and
+# unexported, so that a helper written for one file stays in that file.
+# https://github.com/mpyw/declscope
+#
+# boundary and surplus are on by default and are not restated here. Turning
+# either off would silence the rule the tool exists for.
+rules:
+  naming:
+    # always | never | ondemand. ondemand asks for the namespace in the name
+    # only once a package holds a second one, which leaves the single-file
+    # internal packages alone.
+    qualify: ondemand
+    # The root package is this module's public API, so its exported names are
+    # read bare inside the module and qualified outside it. Both readings want
+    # the namespace in the name. The few declarations where no natural word
+    # order carries it state a `//declscope:ignore qualify` of their own.
+    exported: true

@@ -1,0 +1,28 @@
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.html
+coverage.txt
+
+# Go workspace
+go.work
+go.work.sum
+
+# Built binaries
+/bin/
+
+# `go build ./...` drops a binary beside the main package it builds
+/examples/singlechecker/singlechecker
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

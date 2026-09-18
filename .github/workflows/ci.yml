@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push: {}
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Every tool is pinned in mise.toml, so CI and a contributor's machine run
+      # the same binaries. test_all.sh checks that mise.toml's go still matches
+      # go.mod's toolchain, which golangci-lint is strict about.
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      # Tests, lint and declscope, across every module in the repository. A
+      # failed build reports zero declscope diagnostics and reads as a clean
+      # run, so the script builds before it reads any count.
+      - name: Run the checks
+        run: ./test_all.sh
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: Run tests with coverage
+        run: go test -race -coverprofile=coverage.txt -covermode=atomic -coverpkg=./... ./...
+
+      - uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage.txt
+          flags: unittests
+          name: codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true

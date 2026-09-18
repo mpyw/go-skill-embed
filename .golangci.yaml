@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: standard
+  enable:
+    # A method whose body never names its receiver is a function wearing a
+    # method's clothes. declscope exempts methods from the naming rules, so
+    # writing a helper as a receiver-ignoring method takes that exemption
+    # without earning it.
+    - revive
+  settings:
+    revive:
+      # Only this rule. Naming an explicit list turns revive's defaults off,
+      # which is wanted: the rest overlaps what standard already reports.
+      rules:
+        - name: unused-receiver
+
+formatters:
+  enable:
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/mpyw/go-skill-embed)
+      custom-order: true

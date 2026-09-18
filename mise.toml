@@ -1,0 +1,14 @@
+# Pins the tools so that CI and a local checkout run the same ones.
+#
+# go must match the toolchain line in go.mod. golangci-lint refuses to load a
+# module whose go directive is newer than its own, so a mismatch between this
+# file and go.mod makes lint fail for a reason that is hard to read. The
+# "toolchain" check in test_all.sh compares the two.
+#
+# declscope is pinned here rather than in go.mod. A tool directive would put it
+# in the module graph of every binary that embeds this library, and this library
+# exists to be depended on by linters.
+[tools]
+go = "1.27.1"
+golangci-lint = "2.13.1"
+"go:github.com/mpyw/declscope/cmd/declscope" = "0.6.1"

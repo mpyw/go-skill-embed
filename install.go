@@ -1,0 +1,460 @@
+package skillembed
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/mpyw/go-skill-embed/internal/manifest"
+	"github.com/mpyw/go-skill-embed/internal/skillfs"
+)
+
+// Installer installs embedded skills into agent directories.
+type Installer struct {
+	set          *SkillSet
+	toolName     string
+	version      string
+	commandName  string
+	agents       []Agent
+	defaultAgent []string
+	defaultScope Scope
+	projectRoot  string
+	metadata     bool
+	executable   func(name string, data []byte) bool
+	now          func() time.Time
+	out          io.Writer
+}
+
+// InstallerOption configures an Installer.
+type InstallerOption func(*Installer)
+
+// WithToolName sets the name recorded in installed skills and shown in help.
+// It defaults to the running binary's name.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithToolName(name string) InstallerOption { return func(i *Installer) { i.toolName = name } }
+
+// WithVersion sets the version recorded in installed skills.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithVersion(v string) InstallerOption { return func(i *Installer) { i.version = v } }
+
+// WithCommandName sets the subcommand name used by Run and Intercept. It
+// defaults to "skill".
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithCommandName(name string) InstallerOption { return func(i *Installer) { i.commandName = name } }
+
+// WithAgents restricts the agents the tool offers. It defaults to every
+// built-in agent.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithAgents(agents ...Agent) InstallerOption {
+	return func(i *Installer) { i.agents = append([]Agent(nil), agents...) }
+}
+
+// WithDefaultAgents sets the agents used when --agent is not given. It
+// defaults to github-copilot, matching `gh skill install`.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithDefaultAgents(names ...string) InstallerOption {
+	return func(i *Installer) { i.defaultAgent = append([]string(nil), names...) }
+}
+
+// WithDefaultScope sets the scope used when --scope is not given. It defaults
+// to project, matching `gh skill install`.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithDefaultScope(s Scope) InstallerOption { return func(i *Installer) { i.defaultScope = s } }
+
+// WithProjectRoot overrides the directory project scope resolves against. It
+// defaults to the working directory.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithProjectRoot(dir string) InstallerOption { return func(i *Installer) { i.projectRoot = dir } }
+
+// WithMetadata controls whether installed skills carry x-embedded-* frontmatter.
+// Without it, install cannot tell an outdated copy from an edited one and every
+// existing directory reads as foreign. It is on by default.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithMetadata(on bool) InstallerOption { return func(i *Installer) { i.metadata = on } }
+
+// WithExecutable decides which files are written with the executable bit.
+// embed.FS does not carry file modes, so the default marks any file starting
+// with a #! shebang.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithExecutable(fn func(name string, data []byte) bool) InstallerOption {
+	return func(i *Installer) { i.executable = fn }
+}
+
+// WithOutput sets where Run writes its report. It defaults to os.Stdout.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithOutput(w io.Writer) InstallerOption { return func(i *Installer) { i.out = w } }
+
+// NewInstaller creates an Installer for a set of embedded skills.
+func NewInstaller(set *SkillSet, opts ...InstallerOption) *Installer {
+	in := &Installer{
+		set:          set,
+		commandName:  "skill",
+		agents:       DefaultAgents(),
+		defaultAgent: []string{AgentGitHubCopilot.Name},
+		defaultScope: ScopeProject,
+		metadata:     true,
+		executable:   skillfs.HasShebang,
+		now:          time.Now,
+	}
+	for _, o := range opts {
+		o(in)
+	}
+	if in.toolName == "" {
+		in.toolName = filepath.Base(os.Args[0])
+	}
+	return in
+}
+
+// Output returns the writer Run reports to.
+func (in *Installer) Output() io.Writer {
+	if in.out == nil {
+		return os.Stdout
+	}
+	return in.out
+}
+
+// SkillSet returns the embedded skills.
+func (in *Installer) Set() *SkillSet { return in.set }
+
+// Agents returns the agents the tool offers.
+func (in *Installer) Agents() []Agent { return append([]Agent(nil), in.agents...) }
+
+// CommandName returns the subcommand name.
+func (in *Installer) CommandName() string { return in.commandName }
+
+// ToolName returns the name recorded in installed skills.
+func (in *Installer) ToolName() string { return in.toolName }
+
+// DefaultScope returns the scope used when none is given.
+func (in *Installer) DefaultScope() Scope { return in.defaultScope }
+
+// DefaultAgentNames returns the agents used when none are given.
+func (in *Installer) DefaultAgentNames() []string { return append([]string(nil), in.defaultAgent...) }
+
+// InstallOptions are the inputs shared by install, uninstall and list.
+type InstallOptions struct {
+	// Agents are agent names, or "all". Empty means the installer default.
+	Agents []string
+	// Scope is "project" or "user". Empty means the installer default.
+	Scope string
+	// Dir installs into a directory of your choosing, overriding Agents and Scope.
+	Dir string
+	// Force overwrites skills that were edited, or that something else installed.
+	Force bool
+	// DryRun reports what would happen without touching the file system.
+	DryRun bool
+	// Names selects skills by name. Empty means every embedded skill.
+	Names []string
+}
+
+// InstallTarget is one destination directory and the agents that read from it.
+type InstallTarget struct {
+	// Dir is the absolute skills directory.
+	Dir string
+	// Agents read from Dir. It is empty when InstallOptions.Dir was used.
+	Agents []Agent
+}
+
+// Label renders the target for human readable output.
+func (t InstallTarget) Label() string {
+	if len(t.Agents) == 0 {
+		return t.Dir
+	}
+	titles := make([]string, len(t.Agents))
+	for i, a := range t.Agents {
+		titles[i] = a.Title
+	}
+	return fmt.Sprintf("%s (%s)", t.Dir, strings.Join(titles, ", "))
+}
+
+// Targets resolves the destination directories for o.
+//
+// At project scope every agent but Claude Code shares .agents/skills, so those
+// are merged into one target and a skill is never written there twice.
+func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
+	if o.Dir != "" {
+		abs, err := filepath.Abs(o.Dir)
+		if err != nil {
+			return nil, err
+		}
+		return []InstallTarget{{Dir: abs}}, nil
+	}
+
+	scope := in.defaultScope
+	if o.Scope != "" {
+		s, err := ParseScope(o.Scope)
+		if err != nil {
+			return nil, err
+		}
+		scope = s
+	}
+
+	names := o.Agents
+	if len(names) == 0 {
+		names = in.defaultAgent
+	}
+	agents, err := agentsByName(in.agents, names)
+	if err != nil {
+		return nil, err
+	}
+	if len(agents) == 0 {
+		return nil, errors.New("no agent selected")
+	}
+
+	var targets []InstallTarget
+	index := map[string]int{}
+	for _, a := range agents {
+		dir, err := a.Dir(scope, in.projectRoot)
+		if err != nil {
+			return nil, err
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+		if i, ok := index[abs]; ok {
+			targets[i].Agents = append(targets[i].Agents, a)
+			continue
+		}
+		index[abs] = len(targets)
+		targets = append(targets, InstallTarget{Dir: abs, Agents: []Agent{a}})
+	}
+	return targets, nil
+}
+
+// selected resolves o.Names against the embedded set.
+func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
+	if len(o.Names) == 0 {
+		return in.set.Skills(), nil
+	}
+	out := make([]Skill, 0, len(o.Names))
+	for _, name := range o.Names {
+		sk, ok := in.set.Lookup(name)
+		if !ok {
+			available := in.set.Names()
+			sort.Strings(available)
+			return nil, fmt.Errorf("unknown skill %q (embedded: %s)", name, strings.Join(available, ", "))
+		}
+		out = append(out, sk)
+	}
+	return out, nil
+}
+
+// InstallStatus is the state of one skill at one destination.
+type InstallStatus struct {
+	Skill         Skill
+	InstallTarget InstallTarget
+	// Path is the skill's own directory inside InstallTarget.Dir.
+	Path  string
+	State State
+	// InstalledBy and InstalledVersion come from the installed frontmatter.
+	InstalledBy      string
+	InstalledVersion string
+}
+
+// InstallStatus reports what is installed where, without changing anything.
+func (in *Installer) Status(o InstallOptions) ([]InstallStatus, error) {
+	targets, err := in.Targets(o)
+	if err != nil {
+		return nil, err
+	}
+	skills, err := in.selected(o)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InstallStatus, 0, len(targets)*len(skills))
+	for _, t := range targets {
+		for _, sk := range skills {
+			st, err := in.inspect(t, sk)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, st)
+		}
+	}
+	return out, nil
+}
+
+func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
+	dest := filepath.Join(t.Dir, sk.Name)
+	st := InstallStatus{Skill: sk, InstallTarget: t, Path: dest, State: StateMissing}
+
+	info, err := os.Stat(dest)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return st, nil
+		}
+		return st, err
+	}
+	if !info.IsDir() {
+		st.State = StateForeign
+		return st, nil
+	}
+
+	installed, err := os.ReadFile(filepath.Join(dest, SkillFile))
+	if err != nil {
+		// A directory with no manifest is not ours to replace silently.
+		st.State = StateForeign
+		return st, nil
+	}
+	fields := manifest.Fields(installed)
+	recorded := fields[MetaKeyEmbeddedDigest]
+	st.InstalledBy = fields[MetaKeyEmbeddedBy]
+	st.InstalledVersion = fields[MetaKeyEmbeddedVersion]
+	if recorded == "" || st.InstalledBy != in.toolName {
+		st.State = StateForeign
+		return st, nil
+	}
+
+	actual, err := skillfs.Digest(os.DirFS(dest))
+	if err != nil {
+		return st, err
+	}
+	switch {
+	case actual != recorded:
+		st.State = StateModified
+	case recorded != sk.Digest():
+		st.State = StateOutdated
+	default:
+		st.State = StateUpToDate
+	}
+	return st, nil
+}
+
+// InstallResult is the outcome for one skill at one target.
+type InstallResult struct {
+	Skill         Skill
+	InstallTarget InstallTarget
+	Path          string
+	// Before is the state found at Path.
+	Before State
+	Action Action
+	// Reason explains a skipped action.
+	Reason string
+}
+
+// Install writes the selected skills into the resolved targets.
+//
+// It refuses to touch a destination that this tool did not write, or that was
+// edited after it was written, unless InstallOptions.Force is set.
+func (in *Installer) Install(o InstallOptions) ([]InstallResult, error) {
+	statuses, err := in.Status(o)
+	if err != nil {
+		return nil, err
+	}
+
+	if !o.Force {
+		var blocked []InstallStatus
+		for _, st := range statuses {
+			if st.State.NeedsForce() {
+				blocked = append(blocked, st)
+			}
+		}
+		if len(blocked) > 0 {
+			var b strings.Builder
+			b.WriteString("refusing to overwrite skills this tool did not install, or that were edited after installing:\n")
+			for _, st := range blocked {
+				fmt.Fprintf(&b, "  %s (%s)\n", st.Path, st.State)
+			}
+			b.WriteString("re-run with --force to overwrite")
+			return nil, errors.New(b.String())
+		}
+	}
+
+	results := make([]InstallResult, 0, len(statuses))
+	for _, st := range statuses {
+		r := InstallResult{Skill: st.Skill, InstallTarget: st.InstallTarget, Path: st.Path, Before: st.State}
+		switch {
+		case st.State == StateUpToDate && !o.Force:
+			r.Action, r.Reason = ActionSkipped, "already up to date"
+		case st.State == StateMissing:
+			r.Action = ActionInstalled
+		default:
+			r.Action = ActionUpdated
+		}
+		if r.Action != ActionSkipped && !o.DryRun {
+			if err := in.write(st.Skill, st.Path); err != nil {
+				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.InstallTarget.Dir, err)
+			}
+		}
+		results = append(results, r)
+	}
+	return results, nil
+}
+
+// Uninstall removes the selected skills from the resolved targets. Skills this
+// tool did not install are left alone unless InstallOptions.Force is set.
+func (in *Installer) Uninstall(o InstallOptions) ([]InstallResult, error) {
+	statuses, err := in.Status(o)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]InstallResult, 0, len(statuses))
+	for _, st := range statuses {
+		r := InstallResult{Skill: st.Skill, InstallTarget: st.InstallTarget, Path: st.Path, Before: st.State}
+		switch {
+		case st.State == StateMissing:
+			r.Action, r.Reason = ActionSkipped, "not installed"
+		case st.State == StateForeign && !o.Force:
+			r.Action, r.Reason = ActionSkipped, "installed by something else; use --force"
+		case st.State == StateModified && !o.Force:
+			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
+		default:
+			r.Action = ActionRemoved
+			if !o.DryRun {
+				if err := os.RemoveAll(st.Path); err != nil {
+					return results, err
+				}
+			}
+		}
+		results = append(results, r)
+	}
+	return results, nil
+}
+
+// write materialises one skill at dest.
+func (in *Installer) write(sk Skill, dest string) error {
+	src, err := sk.FS()
+	if err != nil {
+		return err
+	}
+	return skillfs.Write(src, dest, skillfs.WriteOptions{
+		Transform:  in.stamp(sk),
+		Executable: in.executable,
+	})
+}
+
+// stamp records who installed the skill, from what version, and what it held,
+// in the manifest's frontmatter.
+func (in *Installer) stamp(sk Skill) func(string, []byte) ([]byte, error) {
+	if !in.metadata {
+		return nil
+	}
+	return func(name string, data []byte) ([]byte, error) {
+		if name != SkillFile {
+			return data, nil
+		}
+		return manifest.With(data, []manifest.Entry{
+			{Key: MetaKeyEmbeddedBy, Value: in.toolName},
+			{Key: MetaKeyEmbeddedVersion, Value: in.version},
+			{Key: MetaKeyEmbeddedAt, Value: in.now().UTC().Format(time.RFC3339)},
+			{Key: MetaKeyEmbeddedDigest, Value: sk.Digest()},
+		}), nil
+	}
+}
