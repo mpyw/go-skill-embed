@@ -115,6 +115,13 @@ func ExampleInstaller_Intercept() {
 
 	verbose := flag.Bool("v", false, "print what is happening")
 
+	// Your own help says nothing about the skill command unless you say it.
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\n%s\n", skills.UsageHint())
+	}
+
 	// `mytool skill install` is handled here and never returns.
 	// `mytool -v ./...` falls through to the tool itself.
 	skills.Intercept()
@@ -151,7 +158,7 @@ func ExampleInstaller_Run() {
 	}
 
 	// Output:
-	// Manage the skills embedded in mytool.
+	// Manage the agent skills embedded in mytool.
 	//
 	// Usage:
 	//   mytool skill install   [flags] [skill...]
@@ -168,4 +175,18 @@ func ExampleInstaller_Run() {
 	// Embedded skills:
 	//   bare-skill
 	//   demo-skill  A skill used by this module's tests. It is not meant to be installed.
+}
+
+// A tool's own help knows nothing about the skill command. UsageHint is the
+// line that makes it discoverable, in flag.Usage or in an analyzer's Doc.
+func ExampleInstaller_UsageHint() {
+	skills := skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
+		skillembed.WithToolName("mytool"),
+	)
+
+	fmt.Println(skills.UsageHint())
+
+	// Output:
+	// Run "mytool skill" to install the 2 agent skills embedded in mytool.
 }

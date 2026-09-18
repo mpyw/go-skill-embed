@@ -30,9 +30,11 @@ var skills = skillembed.NewInstaller(
 	skillembed.WithVersion("v0.1.0"),
 )
 
+// A driver's own -h is built from the analyzer, and knows nothing about the
+// skill command. UsageHint is the one line that makes it discoverable.
 var analyzer = &analysis.Analyzer{
 	Name: "examplelint",
-	Doc:  "an analyzer that reports nothing, so that the example stays about the skills",
+	Doc:  "an analyzer that reports nothing, so that the example stays about the skills\n\n" + skills.UsageHint(),
 	Run:  func(*analysis.Pass) (any, error) { return nil, nil },
 }
 

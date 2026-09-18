@@ -72,7 +72,7 @@ follows that variable when it is set.
 
 ```
 $ mytool skill
-Manage the skills embedded in mytool.
+Manage the agent skills embedded in mytool.
 
 Usage:
   mytool skill install   [flags] [skill...]
@@ -85,7 +85,35 @@ Flags:
   -f, --force          Overwrite existing skills
       --scope string   Installation scope: {project|user} (default "project")
       --dry-run        Report what would happen without writing
+
 ```
+
+`mytool skill install -h` answers the same way, for that subcommand alone.
+
+> [!WARNING]
+> Your tool's own help says nothing about the skill command. `Intercept` runs
+> before your flags are even defined, and it cannot reach `flag.Usage` or an
+> analyzer's `Doc`. Nobody finds the command unless you name it.
+
+`UsageHint` is that line. It tracks the command name and the skill count, so
+it cannot drift from what the command actually does.
+
+```go
+flag.Usage = func() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	flag.PrintDefaults()
+	fmt.Fprintf(os.Stderr, "\n%s\n", skills.UsageHint())
+}
+```
+
+```
+Run "mytool skill" to install the 2 agent skills embedded in mytool.
+```
+
+A go/analysis driver builds its help from the analyzer, so the line goes in
+`Analyzer.Doc`. `examples/singlechecker` does that.
+
+`Usage` returns the full help text, for a tool that writes its own.
 
 ## What install does
 

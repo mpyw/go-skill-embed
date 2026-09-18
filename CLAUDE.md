@@ -54,6 +54,18 @@ The `replace` directives in the adapter modules point at `../`. Go ignores a
 `replace` in a dependency, so consumers resolve the `require` line normally.
 They are there so the repository builds before a tag exists.
 
+**Letting the flag package print a subcommand's help.** `-h` on a FlagSet
+prints its own defaults, with a single dash and no mention of the tool.
+`gh skill install` prints neither, so `usageFor` writes the flag block out by
+hand and `newCLIFlagSet` installs it as `fs.Usage`. The cost is that the block
+and the `fs.BoolVar` calls beside it have to stay in step. `TestSubcommandHelp`
+is what notices when they do not.
+
+`Intercept` cannot make the skill command discoverable on its own. It runs
+before the tool's own flags exist, and it can reach neither `flag.Usage` nor an
+analyzer's `Doc`. `UsageHint` is a line the tool prints itself, and
+`examples/singlechecker` shows where it goes.
+
 revive runs with `exported` and `package-comments` on top of the standard
 linters. The rename that produced the current names reached doc comments as
 well as declarations, and left two of them starting with the wrong word.

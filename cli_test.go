@@ -3,7 +3,9 @@ package skillembed
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -81,5 +83,41 @@ func TestInterceptHonoursTheCommandName(t *testing.T) {
 	}
 	if handled, _ := in.cliIntercept([]string{"mytool", "skills"}); !handled {
 		t.Error("the configured name was not intercepted")
+	}
+}
+
+// -h on a subcommand has to answer the way the command does. Left to itself
+// the flag package prints its own defaults, with a single dash and no mention
+// of the tool.
+func TestSubcommandHelp(t *testing.T) {
+	out := &bytes.Buffer{}
+	in := newCLIInstaller(t, WithOutput(out))
+
+	if err := in.Run([]string{"install", "-h"}); !errors.Is(err, ErrHelp) {
+		t.Fatalf("Run(install -h) = %v, want ErrHelp", err)
+	}
+	help := out.String()
+
+	for _, want := range []string{
+		"Install the agent skills embedded in testtool.",
+		"  testtool skill install [flags] [skill...]",
+		"-f, --force          Overwrite existing skills",
+		"demo-skill",
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help is missing %q:\n%s", want, help)
+		}
+	}
+	for _, unwanted := range []string{"Usage of skill install:", "-agent value"} {
+		if strings.Contains(help, unwanted) {
+			t.Errorf("the flag package's own usage leaked through: %q\n%s", unwanted, help)
+		}
+	}
+}
+
+func TestUsageHintCounts(t *testing.T) {
+	in := newCLIInstaller(t)
+	if got, want := in.UsageHint(), `Run "testtool skill" to install the 2 agent skills embedded in testtool.`; got != want {
+		t.Errorf("UsageHint() = %q, want %q", got, want)
 	}
 }
