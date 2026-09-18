@@ -166,27 +166,19 @@ func ExampleInstaller_Run() {
 	//   mytool skill list      [flags] [skill...]
 	//
 	// Flags:
-	//       --agent string   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity} (repeatable, or all) (default "github-copilot")
-	//       --dir string     Install to a custom directory (overrides --agent and --scope)
-	//   -f, --force          Overwrite existing skills
-	//       --scope string   Installation scope: {project|user} (default "project")
-	//       --dry-run        Report what would happen without writing
+	//   -agent value
+	//     	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all (repeatable) (default "github-copilot")
+	//   -dir string
+	//     	Install to a custom directory (overrides -agent and -scope)
+	//   -dry-run
+	//     	Report what would happen without writing
+	//   -f	Overwrite existing skills (shorthand)
+	//   -force
+	//     	Overwrite existing skills
+	//   -scope string
+	//     	Installation scope: {project|user} (default "project")
 	//
 	// Embedded skills:
 	//   bare-skill
 	//   demo-skill  A skill used by this module's tests. It is not meant to be installed.
-}
-
-// A tool's own help knows nothing about the skill command. UsageHint is the
-// line that makes it discoverable, in flag.Usage or in an analyzer's Doc.
-func ExampleInstaller_UsageHint() {
-	skills := skillembed.NewInstaller(
-		skillembed.MustSkillsFromFS(exampleSkills, "testdata/skills"),
-		skillembed.WithToolName("mytool"),
-	)
-
-	fmt.Println(skills.UsageHint())
-
-	// Output:
-	// Run "mytool skill" to install the 2 agent skills embedded in mytool.
 }

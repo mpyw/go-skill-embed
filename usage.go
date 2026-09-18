@@ -2,6 +2,7 @@ package skillembed
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -9,7 +10,10 @@ import (
 
 // Usage is the help text for the skill command. A tool that writes its own
 // help can print it, so that the two agree.
-func (in *Installer) Usage() string { return in.usageFor("") }
+func (in *Installer) Usage() string {
+	var o InstallOptions
+	return in.usageFor("", in.newCLIFlagSet("", &o))
+}
 
 // UsageHint is one line naming the skill command, for a tool whose own help
 // would otherwise never mention it. flag.Usage and an analyzer's Doc are the
@@ -51,33 +55,26 @@ func (in *Installer) usageHeadings(sub string) (summary, lines string) {
 }
 
 // usageFor renders the help for one subcommand, or for the command itself when
-// sub is empty. The flags are written out rather than taken from the FlagSet,
-// because the flag package prints a single dash and `gh skill install` does
-// not.
+// sub is empty.
+//
+// The flag block comes from the FlagSet that actually parses the arguments, so
+// it cannot drift from it, and it reads the way a flag package tool reads. The
+// long forms work too, since the flag package accepts either, but a tool whose
+// own flags print as -v should not print --agent next to them.
 //
 //declscope:package // cli.go installs it as each subcommand's flag.Usage
-func (in *Installer) usageFor(sub string) string {
+func (in *Installer) usageFor(sub string, fs *flag.FlagSet) string {
 	summary, lines := in.usageHeadings(sub)
 
 	var b bytes.Buffer
-	fmt.Fprintf(&b, `%s
+	fmt.Fprintf(&b, "%s\n\nUsage:\n%s\nFlags:\n", summary, lines)
 
-Usage:
-%s
-Flags:
-      --agent string   Target agent: %s (repeatable, or all) (default %q)
-      --dir string     Install to a custom directory (overrides --agent and --scope)
-  -f, --force          Overwrite existing skills
-      --scope string   Installation scope: {project|user} (default %q)
-      --dry-run        Report what would happen without writing
+	restore := fs.Output()
+	fs.SetOutput(&b)
+	fs.PrintDefaults()
+	fs.SetOutput(restore)
 
-Embedded skills:
-`,
-		summary,
-		lines,
-		in.AgentChoices(), strings.Join(in.DefaultAgentNames(), ","),
-		in.DefaultScope(),
-	)
+	b.WriteString("\nEmbedded skills:\n")
 
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	for _, sk := range in.Set().Skills() {

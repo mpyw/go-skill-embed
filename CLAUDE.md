@@ -54,12 +54,16 @@ The `replace` directives in the adapter modules point at `../`. Go ignores a
 `replace` in a dependency, so consumers resolve the `require` line normally.
 They are there so the repository builds before a tag exists.
 
-**Letting the flag package print a subcommand's help.** `-h` on a FlagSet
-prints its own defaults, with a single dash and no mention of the tool.
-`gh skill install` prints neither, so `usageFor` writes the flag block out by
-hand and `newCLIFlagSet` installs it as `fs.Usage`. The cost is that the block
-and the `fs.BoolVar` calls beside it have to stay in step. `TestSubcommandHelp`
-is what notices when they do not.
+**Writing the flag block out by hand to match `gh skill install`.** It printed
+`--agent` and `-f, --force`, which read well and were a lie. `-f` and `-force`
+are two flags on one variable, the `flag` package has no short and long forms,
+and a tool built on it prints one dash everywhere else. `usageFor` now takes
+the FlagSet that parses the arguments and calls `PrintDefaults` on it. The
+frame around the block is still this library's, because that is the part the
+`flag` package cannot give.
+
+The adapters print `--agent`, since cobra and urfave/cli do. Each front end
+should read as if the host framework wrote it.
 
 `Intercept` cannot make the skill command discoverable on its own. It runs
 before the tool's own flags exist, and it can reach neither `flag.Usage` nor an

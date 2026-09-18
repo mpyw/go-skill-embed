@@ -80,15 +80,31 @@ Usage:
   mytool skill list      [flags] [skill...]
 
 Flags:
-      --agent string   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity} (repeatable, or all) (default "github-copilot")
-      --dir string     Install to a custom directory (overrides --agent and --scope)
-  -f, --force          Overwrite existing skills
-      --scope string   Installation scope: {project|user} (default "project")
-      --dry-run        Report what would happen without writing
+  -agent value
+    	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all (repeatable) (default "github-copilot")
+  -dir string
+    	Install to a custom directory (overrides -agent and -scope)
+  -dry-run
+    	Report what would happen without writing
+  -f	Overwrite existing skills (shorthand)
+  -force
+    	Overwrite existing skills
+  -scope string
+    	Installation scope: {project|user} (default "project")
 
 ```
 
 `mytool skill install -h` answers the same way, for that subcommand alone.
+
+> [!NOTE]
+> The frame is this library's. The flag block is the `flag` package's own, so
+> it prints one dash and sits next to your tool's flags without looking
+> foreign. Both `-agent` and `--agent` are accepted, as always with that
+> package. `-f` and `-force` are two flags on one variable, which is why they
+> print on two lines.
+>
+> The cobra and urfave/cli adapters print `--agent`, because that is what
+> those frameworks print.
 
 > [!WARNING]
 > Your tool's own help says nothing about the skill command. `Intercept` runs

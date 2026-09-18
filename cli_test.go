@@ -86,9 +86,9 @@ func TestInterceptHonoursTheCommandName(t *testing.T) {
 	}
 }
 
-// -h on a subcommand has to answer the way the command does. Left to itself
-// the flag package prints its own defaults, with a single dash and no mention
-// of the tool.
+// -h on a subcommand answers with the command's own frame around the flag
+// package's own flag block. The frame is what the flag package cannot give,
+// and the block is what it should not be asked to give up.
 func TestSubcommandHelp(t *testing.T) {
 	out := &bytes.Buffer{}
 	in := newCLIInstaller(t, WithOutput(out))
@@ -101,17 +101,18 @@ func TestSubcommandHelp(t *testing.T) {
 	for _, want := range []string{
 		"Install the agent skills embedded in testtool.",
 		"  testtool skill install [flags] [skill...]",
-		"-f, --force          Overwrite existing skills",
+		"  -agent value",  // one dash, as a flag package tool prints
+		"  -scope string", //
+		`(default "project")`,
 		"demo-skill",
 	} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help is missing %q:\n%s", want, help)
 		}
 	}
-	for _, unwanted := range []string{"Usage of skill install:", "-agent value"} {
-		if strings.Contains(help, unwanted) {
-			t.Errorf("the flag package's own usage leaked through: %q\n%s", unwanted, help)
-		}
+	// The flag package's own header names the FlagSet and not the tool.
+	if strings.Contains(help, "Usage of skill install:") {
+		t.Errorf("the flag package's own header leaked through:\n%s", help)
 	}
 }
 

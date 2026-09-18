@@ -92,46 +92,55 @@ func (in *Installer) cliIntercept(argv []string) (handled bool, err error) {
 	return true, nil
 }
 
-// cliRepeatable collects a flag that may be given more than once, and that also
-// accepts a comma separated list.
-type cliRepeatable []string
+// cliRepeatable is a flag that may be given more than once, and that also
+// accepts a comma separated list. It appends straight into the options, so no
+// caller has to carry one around.
+type cliRepeatable struct{ dest *[]string }
 
-func (r *cliRepeatable) String() string { return strings.Join(*r, ",") }
+// String is called on a zero value to decide whether a default is worth
+// printing, so it has to survive a nil destination.
+func (r cliRepeatable) String() string {
+	if r.dest == nil {
+		return ""
+	}
+	return strings.Join(*r.dest, ",")
+}
 
-func (r *cliRepeatable) Set(v string) error {
-	*r = append(*r, v)
+func (r cliRepeatable) Set(v string) error {
+	*r.dest = append(*r.dest, v)
 	return nil
 }
 
 // bindCLIFlags registers the flags `gh skill install` defines, so the two read
 // the same way.
-func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions, agents *cliRepeatable) {
-	fs.Var(agents, "agent", "Target agent: "+in.AgentChoices()+" (repeatable, or all)")
-	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides --agent and --scope)")
-	fs.StringVar(&o.Scope, "scope", "", fmt.Sprintf("Installation scope: {project|user} (default %q)", in.DefaultScope()))
+func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
+	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all (repeatable) (default %q)",
+		in.AgentChoices(), strings.Join(in.DefaultAgentNames(), ",")))
+	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
+	fs.StringVar(&o.Scope, "scope", string(in.DefaultScope()), "Installation scope: {project|user}")
 	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
 	fs.BoolVar(&o.Force, "f", false, "Overwrite existing skills (shorthand)")
 	fs.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
 }
 
-func (in *Installer) newCLIFlagSet(sub string) *flag.FlagSet {
+// newCLIFlagSet builds the FlagSet for one subcommand, already bound and
+// already knowing how to print itself.
+//
+//declscope:package // usage.go renders the flag block from the real FlagSet
+func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet {
 	fs := flag.NewFlagSet(in.CommandName()+" "+sub, flag.ContinueOnError)
 	fs.SetOutput(in.Output())
-	// The flag package would print its own defaults, with a single dash and no
-	// mention of the tool. -h has to answer the same way the command does.
-	fs.Usage = func() { _, _ = io.WriteString(in.Output(), in.usageFor(sub)) }
+	in.bindCLIFlags(fs, o)
+	fs.Usage = func() { _, _ = io.WriteString(in.Output(), in.usageFor(sub, fs)) }
 	return fs
 }
 
 func (in *Installer) parseCLIOptions(sub string, args []string) (InstallOptions, error) {
 	var o InstallOptions
-	var agents cliRepeatable
-	fs := in.newCLIFlagSet(sub)
-	in.bindCLIFlags(fs, &o, &agents)
+	fs := in.newCLIFlagSet(sub, &o)
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
-	o.Agents = agents
 	o.Names = fs.Args()
 	return o, nil
 }
