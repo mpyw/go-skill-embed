@@ -40,9 +40,9 @@ func (in *Installer) Run(ctx context.Context, args []string) error {
 		return in.cliList(ctx, rest)
 	case "help", "-h", "--help":
 		_, _ = io.WriteString(in.cliOut(), in.Usage())
-		return nil
+		return ErrHelp
 	}
-	_, _ = io.WriteString(os.Stderr, in.Usage())
+	_, _ = io.WriteString(in.cliErrOut(), in.Usage())
 	return fmt.Errorf("unknown %s subcommand %q", in.CommandName(), sub)
 }
 
@@ -75,7 +75,7 @@ func (in *Installer) Intercept() {
 		return
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", in.ToolName(), err)
+		_, _ = fmt.Fprintf(in.cliErrOut(), "%s: %v\n", in.ToolName(), err)
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -120,6 +120,14 @@ func (in *Installer) cliOut() io.Writer {
 	return in.out
 }
 
+// cliErrOut is where Run reports a mistake. It defaults to os.Stderr.
+func (in *Installer) cliErrOut() io.Writer {
+	if in.errOut == nil {
+		return os.Stderr
+	}
+	return in.errOut
+}
+
 // cliScope binds the typed Scope to a string flag.
 type cliScope struct{ dest *Scope }
 
@@ -159,9 +167,12 @@ func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 //declscope:package // usage.go renders the flag block from the real FlagSet
 func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet {
 	fs := flag.NewFlagSet(in.CommandName()+" "+sub, flag.ContinueOnError)
-	fs.SetOutput(in.cliOut())
+	// The flag package would print the complaint and then call Usage, and the
+	// caller prints the complaint again. Both are silenced here and written
+	// once, by parseCLIOptions, to the stream each belongs on.
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
 	in.bindCLIFlags(fs, o)
-	fs.Usage = func() { _, _ = io.WriteString(in.cliOut(), in.usageFor(sub, fs)) }
 	return fs
 }
 
@@ -169,6 +180,12 @@ func (in *Installer) parseCLIOptions(sub string, args []string) (InstallOptions,
 	o := InstallOptions{Scope: in.DefaultScope()}
 	fs := in.newCLIFlagSet(sub, &o)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// Help was asked for, so it is what was wanted.
+			_, _ = io.WriteString(in.cliOut(), in.usageFor(sub, fs))
+			return o, ErrHelp
+		}
+		_, _ = io.WriteString(in.cliErrOut(), in.usageFor(sub, fs))
 		return o, err
 	}
 	o.Names = fs.Args()

@@ -8,7 +8,9 @@ const (
 	StateMissing State = "missing"
 	// StateUpToDate means the installed copy matches the embedded skill.
 	StateUpToDate State = "up-to-date"
-	// StateOutdated means we installed it and the binary now carries a newer copy.
+	// StateOutdated means we installed it and it is no longer what this binary
+	// would write. The binary carries a newer copy, or a file lost the
+	// executable bit it was installed with.
 	StateOutdated State = "outdated"
 	// StateModified means we installed it and the files were edited afterwards.
 	StateModified State = "modified"

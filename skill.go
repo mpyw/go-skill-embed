@@ -130,12 +130,25 @@ func SkillsFromFS(fsys fs.FS, root string) (*SkillSet, error) {
 	}
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
 
-	seen := map[string]string{}
+	// Names are compared without case, because the file system they are
+	// installed on usually is. Two skills differing only in case would install
+	// over each other, and every run would flip the directory's contents while
+	// reporting success.
+	seen := map[string]Skill{}
 	for _, sk := range skills {
-		if prev, ok := seen[sk.Name]; ok {
-			return nil, fmt.Errorf("skillembed: %s and %s both declare the skill name %q", prev, sk.Dir, sk.Name)
+		key := strings.ToLower(sk.Name)
+		prev, ok := seen[key]
+		switch {
+		case !ok:
+			seen[key] = sk
+		case prev.Name == sk.Name:
+			return nil, fmt.Errorf("skillembed: %s and %s both declare the skill name %q",
+				prev.Dir, sk.Dir, sk.Name)
+		default:
+			return nil, fmt.Errorf("skillembed: %s and %s declare %q and %q, which differ only in case"+
+				" and install over each other on a case insensitive file system",
+				prev.Dir, sk.Dir, prev.Name, sk.Name)
 		}
-		seen[sk.Name] = sk.Dir
 	}
 	return &SkillSet{skills: skills}, nil
 }

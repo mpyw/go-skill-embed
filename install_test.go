@@ -494,3 +494,63 @@ func TestErrorsAreMatchable(t *testing.T) {
 		})
 	}
 }
+
+// A script that loses its executable bit cannot be run by the agent. Nobody
+// edited it, so repairing it must not need --force.
+func TestLostExecutableBitIsRepaired(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t)
+	dest := filepath.Join(root, "skills")
+	opts := skillembed.InstallOptions{Dir: dest, Names: []string{"demo-skill"}}
+
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dest, "demo-skill", "scripts", "run.sh")
+	info, err := os.Stat(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("the script was installed without the executable bit: %v", info.Mode())
+	}
+
+	if err := os.Chmod(script, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := in.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statuses[0].State != skillembed.StateOutdated {
+		t.Errorf("state = %s, want %s", statuses[0].State, skillembed.StateOutdated)
+	}
+
+	results, err := in.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].Action != skillembed.ActionUpdated {
+		t.Errorf("install = %s, want %s", results[0].Action, skillembed.ActionUpdated)
+	}
+	if info, err := os.Stat(script); err != nil || info.Mode()&0o111 == 0 {
+		t.Errorf("the executable bit was not restored: %v %v", info.Mode(), err)
+	}
+}
+
+// Two skills whose names differ only in case install over each other on a case
+// insensitive file system, and every run flips the directory's contents while
+// reporting success.
+func TestNamesDifferingOnlyInCaseAreRejected(t *testing.T) {
+	fsys := fstest.MapFS{
+		"skills/a/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: Demo\n---\nA\n")},
+		"skills/b/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: demo\n---\nB\n")},
+	}
+	_, err := skillembed.SkillsFromFS(fsys, "skills")
+	if err == nil {
+		t.Fatal("the set was accepted")
+	}
+	if !strings.Contains(err.Error(), "differ only in case") {
+		t.Errorf("error does not explain the collision: %v", err)
+	}
+}

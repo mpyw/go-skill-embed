@@ -18,26 +18,29 @@ import (
 
 // Installer installs embedded skills into agent directories.
 type Installer struct {
-	// set, agents, defaultAgent and out are the installer's configuration as
-	// the front end sees it. cli.go, usage.go and agent.go read them to build
-	// help and to decide where to write.
-	//
-	//declscope:package
-	set         *SkillSet
-	toolName    string
-	version     string
-	commandName string
-	//declscope:package
-	agents []Agent
-	//declscope:package
-	defaultAgent []string
+	toolName     string
+	version      string
+	commandName  string
 	defaultScope Scope
 	projectRoot  string
 	metadata     bool
 	executable   func(name string, data []byte) bool
 	now          func() time.Time
+
+	// What the front end sees. cli.go, usage.go and agent.go read these to
+	// build help and to decide where to write, which is a crossing this module
+	// makes on purpose rather than one nobody noticed. The fields above are
+	// install.go's own, and declscope still says so if that changes.
+	//declscope:package
+	set *SkillSet
+	//declscope:package
+	agents []Agent
+	//declscope:package
+	defaultAgent []string
 	//declscope:package
 	out io.Writer
+	//declscope:package
+	errOut io.Writer
 }
 
 // InstallerOption configures an Installer.
@@ -113,10 +116,22 @@ func WithExecutable(fn func(name string, data []byte) bool) InstallerOption {
 	return func(i *Installer) { i.executable = fn }
 }
 
-// WithOutput sets where Run writes its report. It defaults to os.Stdout.
+// WithOutput sets where Run writes what was asked for: the report, and the
+// help text when help was requested. It defaults to os.Stdout.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithOutput(w io.Writer) InstallerOption { return func(i *Installer) { i.out = w } }
+
+// WithErrorOutput sets where Run writes diagnostics: the message for a bad
+// flag or an unknown subcommand, and the usage that goes with it. It defaults
+// to os.Stderr.
+//
+// The two are separate so that `mytool skill list > skills.txt` puts the list
+// in the file and the complaint on the terminal, rather than the other way
+// round.
+//
+//declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
+func WithErrorOutput(w io.Writer) InstallerOption { return func(i *Installer) { i.errOut = w } }
 
 // NewInstaller creates an Installer for a set of embedded skills.
 func NewInstaller(set *SkillSet, opts ...InstallerOption) *Installer {
@@ -357,7 +372,21 @@ func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 	switch {
 	case actual != recorded:
 		st.State = StateModified
+		return st, nil
 	case recorded != sk.Digest():
+		st.State = StateOutdated
+		return st, nil
+	}
+
+	// The contents match. The executable bit is not in the digest, and a script
+	// that lost it cannot be run by the agent. It is outdated rather than
+	// modified: the user did not do this, so repairing it should not need
+	// --force.
+	ok, err := skillfs.ExecutableBitsMatch(os.DirFS(dest), in.executable)
+	switch {
+	case err != nil:
+		st.State = StateForeign
+	case !ok:
 		st.State = StateOutdated
 	default:
 		st.State = StateUpToDate

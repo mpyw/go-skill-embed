@@ -25,10 +25,13 @@ func Command(in *skillembed.Installer) *cobra.Command {
 			".\n\nSkills are written to a directory the agent reads, at project or user scope.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+		// A skill that needs --force is not a command line mistake, so the
+		// whole usage block does not belong under it.
+		SilenceUsage: true,
 	}
 	cmd.AddCommand(
-		action(in, "install", "Install the embedded skills", in.Install),
-		action(in, "uninstall", "Remove the embedded skills", in.Uninstall),
+		action(in, "install", "Install the embedded skills", nil, in.Install),
+		action(in, "uninstall", "Remove the embedded skills", []string{"remove"}, in.Uninstall),
 		list(in),
 	)
 	return cmd
@@ -36,11 +39,12 @@ func Command(in *skillembed.Installer) *cobra.Command {
 
 // action builds install or uninstall, which differ only in what they call and
 // what they print.
-func action(in *skillembed.Installer, name, short string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cobra.Command {
+func action(in *skillembed.Installer, name, short string, aliases []string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cobra.Command {
 	var o skillembed.InstallOptions
 	cmd := &cobra.Command{
-		Use:   name + " [skill...]",
-		Short: short,
+		Use:     name + " [skill...]",
+		Aliases: aliases,
+		Short:   short,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Names = args
 			// Report first: the results describe everything that happened
@@ -59,8 +63,9 @@ func action(in *skillembed.Installer, name, short string, run func(context.Conte
 func list(in *skillembed.Installer) *cobra.Command {
 	var o skillembed.InstallOptions
 	cmd := &cobra.Command{
-		Use:   "list [skill...]",
-		Short: "Show the embedded skills and where they stand",
+		Use:     "list [skill...]",
+		Aliases: []string{"ls"},
+		Short:   "Show the embedded skills and where they stand",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Names = args
 			statuses, err := in.Status(cmd.Context(), o)

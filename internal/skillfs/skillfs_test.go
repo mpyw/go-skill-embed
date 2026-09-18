@@ -1,8 +1,10 @@
 package skillfs
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -150,5 +152,43 @@ func TestWriteSkipsOperatingSystemJunk(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dest, ".DS_Store")); err == nil {
 		t.Error(".DS_Store was installed")
+	}
+}
+
+// The swap is two renames with the old directory moved aside. A failure has to
+// leave the existing installation exactly as it was.
+func TestWriteLeavesTheOldTreeOnFailure(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Write(t.Context(), demoFS(), dest, WriteOptions{
+		Transform: func(name string, data []byte) ([]byte, error) {
+			if name == "reference/tips.md" {
+				return nil, errors.New("no")
+			}
+			return data, nil
+		},
+	})
+	if err == nil {
+		t.Fatal("the failing write reported success")
+	}
+
+	for _, p := range []string{manifest.FileName, "scripts/run.sh", "reference/tips.md"} {
+		if _, err := os.Stat(filepath.Join(dest, filepath.FromSlash(p))); err != nil {
+			t.Errorf("%s did not survive the failed write: %v", p, err)
+		}
+	}
+
+	// Nothing is left beside it either.
+	entries, err := os.ReadDir(filepath.Dir(dest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".demo.") {
+			t.Errorf("a staging or aside directory was left behind: %s", e.Name())
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -61,7 +62,7 @@ func Digest(fsys fs.FS) (string, error) {
 			return err
 		}
 		if p == manifest.FileName {
-			data = manifest.Strip(data)
+			data = manifest.Normalize(data)
 		}
 		_, _ = fmt.Fprintf(h, "%s\x00%d\x00", p, len(data))
 		_, _ = h.Write(data)
@@ -71,6 +72,38 @@ func Digest(fsys fs.FS) (string, error) {
 		return "", err
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ExecutableBitsMatch reports whether every file carries the executable bit
+// the rule asks for.
+//
+// The digest cannot answer this. An embedded file has no mode at all, so the
+// two sides of a comparison would never agree on one. The rule reads the
+// contents instead, and contents the digest has already matched give the same
+// answer on either side.
+func ExecutableBitsMatch(fsys fs.FS, rule func(name string, data []byte) bool) (bool, error) {
+	if rule == nil {
+		return true, nil
+	}
+	match := true
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || IsJunk(p) || !d.Type().IsRegular() || !match {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return err
+		}
+		if rule(p, data) != (info.Mode()&0o111 != 0) {
+			match = false
+		}
+		return nil
+	})
+	return match, err
 }
 
 // WriteOptions configures Write.
@@ -85,8 +118,10 @@ type WriteOptions struct {
 
 // Write materialises src at dest, replacing whatever is there.
 //
-// The tree is staged in a sibling directory and swapped in with a rename, so a
-// failure part way through leaves the existing installation untouched.
+// The tree is staged in a sibling directory, and the swap is two renames with
+// the old directory moved aside in between. Removing the destination first
+// would not be atomic: a removal that failed half way left the old
+// installation destroyed and the new one unwritten.
 func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 	executable := o.Executable
 	if executable == nil {
@@ -145,10 +180,37 @@ func Write(ctx context.Context, src fs.FS, dest string, o WriteOptions) error {
 		return err
 	}
 
-	if err := os.RemoveAll(dest); err != nil {
+	// A name to move the old directory to, next to it so the rename stays on
+	// one file system. MkdirTemp is only how the name is reserved.
+	aside, err := os.MkdirTemp(parent, "."+filepath.Base(dest)+".old-")
+	if err != nil {
 		return err
 	}
-	return os.Rename(staging, dest)
+	if err := os.Remove(aside); err != nil {
+		return err
+	}
+
+	moved := false
+	if _, err := os.Lstat(dest); err == nil {
+		if err := os.Rename(dest, aside); err != nil {
+			return err
+		}
+		moved = true
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	if err := os.Rename(staging, dest); err != nil {
+		if moved {
+			// Put back what was there. The caller is no worse off than before.
+			_ = os.Rename(aside, dest)
+		}
+		return err
+	}
+	if moved {
+		return os.RemoveAll(aside)
+	}
+	return nil
 }
 
 // HasShebang is the default Executable test.

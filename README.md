@@ -104,13 +104,13 @@ follows that variable when it is set.
 ## The command
 
 ```
-$ mytool skill
-Manage the agent skills embedded in mytool.
+$ examplelint skill
+Manage the agent skills embedded in examplelint.
 
 Usage:
-  mytool skill install   [flags] [skill...]
-  mytool skill uninstall [flags] [skill...]
-  mytool skill list      [flags] [skill...]
+  examplelint skill install   [flags] [skill...]
+  examplelint skill uninstall [flags] [skill...]
+  examplelint skill list      [flags] [skill...]
 
 Flags:
   -agent value
@@ -125,9 +125,13 @@ Flags:
   -scope value
     	Installation scope: {project|user} (default project)
 
+Embedded skills:
+  example-adoption  Stand-in skill for the singlechecker example. A real linter ships the skill that explains how to ...
 ```
 
-`mytool skill install -h` answers the same way, for that subcommand alone.
+That is `examples/singlechecker` in this repository, run for real.
+`examplelint skill install -h` answers the same way, for that subcommand alone.
+`list` and `uninstall` also answer to `ls` and `remove`, in every front end.
 
 > [!NOTE]
 > The frame is this library's. The flag block is the `flag` package's own, so
@@ -183,9 +187,9 @@ copy and its embedded original hash the same.
 | --- | --- | --- |
 | `missing` | Nothing is there | Writes it |
 | `up-to-date` | The installed copy matches | Skips it |
-| `outdated` | Your binary carries a newer copy | Overwrites it |
+| `outdated` | Not what this binary would write | Overwrites it |
 | `modified` | The user edited it after installing | Skips it, and reports `ErrNeedsForce` |
-| `foreign` | Something else owns that name, or the copy cannot be read | Skips it, and reports `ErrNeedsForce` |
+| `foreign` | Not something this tool wrote | Skips it, and reports `ErrNeedsForce` |
 
 A skipped skill does not stop the others. `Install` writes everything it can,
 returns one `InstallResult` per skill either way, and returns an error wrapping
@@ -200,9 +204,11 @@ if errors.Is(err, skillembed.ErrNeedsForce) {
 }
 ```
 
-`foreign` also covers a directory this tool cannot read, such as one holding a
-symlink. Nothing can be said about what is there, so nothing is claimed, and
-`--force` remains the way through.
+`foreign` is wider than "another tool put it there". It also covers a
+hand-written skill, a directory with no `SKILL.md`, one whose `SKILL.md` has no
+`x-embedded-*` keys, and one this tool cannot read at all, such as a directory
+holding a symlink. Nothing can be said about any of them, so nothing is
+claimed, and `--force` remains the way through.
 
 > [!WARNING]
 > `WithMetadata(false)` turns the four keys off. Install can then no longer
@@ -256,6 +262,18 @@ func main() {
 A `go vet -vettool=` run passes `-flags` or a config file path, so it is never
 affected. `examples/singlechecker` is a working driver that does this, with
 tests that run the real binary both ways.
+
+> [!NOTE]
+> The guard reads the first argument, so a package whose directory is literally
+> named `skill` is hidden by it. Write `./skill` instead, which the guard does
+> not match and every driver understands.
+
+> [!NOTE]
+> One thing the four front ends cannot agree on is a flag written after a
+> positional argument. `mytool skill install demo --dry-run` works under cobra
+> and urfave/cli v3, and is read as a second skill name by the `flag` package
+> and urfave/cli v2. That is each framework's own parser, not this library.
+> Writing flags before names works everywhere.
 
 ### cobra
 

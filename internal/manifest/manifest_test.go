@@ -75,17 +75,41 @@ func TestWithCreatesFrontmatter(t *testing.T) {
 	}
 }
 
-// A manifest with no frontmatter gains one on install. Strip has to take it
-// away again, or the installed copy never hashes equal to its source.
-func TestWithThenStripRoundTripsWithoutFrontmatter(t *testing.T) {
-	const src = "A manifest that carries no frontmatter at all.\n"
+// A manifest with no frontmatter gains one on install, and a manifest with an
+// empty one keeps it. Normalize has to make the two hash alike, or a skill
+// reads as modified the moment it is installed.
+func TestNormalizeMakesTheTwoEmptyFormsAgree(t *testing.T) {
 	entries := []Entry{{Key: KeyEmbeddedBy, Value: "mytool"}, {Key: KeyEmbeddedDigest, Value: "sha256:abc"}}
 
-	stamped := With([]byte(src), entries)
-	if Fields(stamped)[KeyEmbeddedBy] != "mytool" {
-		t.Fatalf("metadata not readable back:\n%s", stamped)
+	for _, src := range []string{
+		"A manifest that carries no frontmatter at all.\n",
+		"---\n---\nA manifest whose frontmatter block is empty.\n",
+		"---\n\n  \n---\nA manifest whose frontmatter block is blank.\n",
+	} {
+		stamped := With([]byte(src), entries)
+		if Fields(stamped)[KeyEmbeddedBy] != "mytool" {
+			t.Errorf("metadata not readable back:\n%s", stamped)
+		}
+		if got, want := string(Normalize(stamped)), string(Normalize([]byte(src))); got != want {
+			t.Errorf("the installed copy does not normalize to its source:\ngot:  %q\nwant: %q", got, want)
+		}
 	}
-	if got := string(Strip(stamped)); got != src {
-		t.Errorf("Strip did not restore the original:\ngot:  %q\nwant: %q", got, src)
+}
+
+// A block scalar may hold a line that looks exactly like an injected key.
+// Removing it would change the file the author wrote.
+func TestStripLeavesNestedContentAlone(t *testing.T) {
+	src := "---\nname: demo\nexample: |\n  " + KeyEmbeddedDigest + ": \"sha256:x\"\n  second line\n---\nbody\n"
+
+	stamped := With([]byte(src), []Entry{{Key: KeyEmbeddedDigest, Value: "sha256:real"}})
+	if !strings.Contains(string(stamped), "  "+KeyEmbeddedDigest+": \"sha256:x\"") {
+		t.Errorf("the block scalar lost a line:\n%s", stamped)
+	}
+	if got, want := string(Strip(stamped)), src; got != want {
+		t.Errorf("Strip did not restore the original:\ngot:  %q\nwant: %q", got, want)
+	}
+	// The real key is still the one that reads back.
+	if got := Fields(stamped)[KeyEmbeddedDigest]; got != "sha256:real" {
+		t.Errorf("%s = %q, want the injected value", KeyEmbeddedDigest, got)
 	}
 }

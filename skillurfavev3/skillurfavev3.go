@@ -26,17 +26,18 @@ func Command(in *skillembed.Installer) *cli.Command {
 		Name:  in.CommandName(),
 		Usage: "Manage the skills embedded in " + in.ToolName(),
 		Commands: []*cli.Command{
-			action(in, "install", "Install the embedded skills", in.Install),
-			action(in, "uninstall", "Remove the embedded skills", in.Uninstall),
+			action(in, "install", "Install the embedded skills", nil, in.Install),
+			action(in, "uninstall", "Remove the embedded skills", []string{"remove"}, in.Uninstall),
 			list(in),
 		},
 	}
 }
 
 // action builds install or uninstall, which differ only in what they call.
-func action(in *skillembed.Installer, name, usage string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
+func action(in *skillembed.Installer, name, usage string, aliases []string, run func(context.Context, skillembed.InstallOptions) ([]skillembed.InstallResult, error)) *cli.Command {
 	return &cli.Command{
 		Name:      name,
+		Aliases:   aliases,
 		Usage:     usage,
 		ArgsUsage: "[skill...]",
 		Flags:     flags(in),
@@ -56,6 +57,7 @@ func action(in *skillembed.Installer, name, usage string, run func(context.Conte
 func list(in *skillembed.Installer) *cli.Command {
 	return &cli.Command{
 		Name:      "list",
+		Aliases:   []string{"ls"},
 		Usage:     "Show the embedded skills and where they stand",
 		ArgsUsage: "[skill...]",
 		Flags:     flags(in),

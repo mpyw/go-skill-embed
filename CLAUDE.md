@@ -144,6 +144,27 @@ differently in the core and in the adapters. The exported renderer is now the
 whole of what `list` prints, and it takes the skills from the statuses rather
 than from the set.
 
+**Hashing what the file system says about a mode.** An embedded file has no
+mode at all, so the two sides of a comparison could never agree on one.
+`ExecutableBitsMatch` applies the rule to the contents instead, which the
+digest has already matched, so both sides reach the same answer. A lost
+executable bit reads as `outdated` rather than `modified`, because the user did
+not do it and repairing it should not need `--force`.
+
+**Removing the destination before renaming the staging directory in.** The
+removal is not atomic either. One that failed half way left the old
+installation destroyed and the new one unwritten, which is the opposite of what
+the comment above it promised. The swap is two renames now, with the old
+directory moved aside in between and moved back if the second one fails.
+
+**Letting `Strip` remove a frontmatter block that turned out empty.** It could
+not tell a block `With` had written from one the source already had, so a skill
+whose manifest carried an empty block read as `modified` the moment it was
+installed. `Normalize` removes an empty block on both sides instead, which
+makes the two spellings of "no frontmatter" hash alike. `Strip` now only ever
+removes the injected keys, and skips indented lines, because a block scalar may
+hold a line that looks exactly like one.
+
 ## Known and left alone
 
 An adversarial review raised these. They are recorded so the next reader does
@@ -163,7 +184,7 @@ and none of them corrupts anything they did not touch.
 | The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
 | A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
 | `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |
-| `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it |
+| `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it. `ErrNoAgentSelected` at least makes it matchable |
 | `InstallOptions.Names` is not deduplicated | Naming a skill twice writes it twice |
 | A BOM moves into the body | Only when `With` creates a frontmatter block that was not there |
 | `quote` and `unquote` are asymmetric | A tool name holding a quote or a backslash never reads back, so the skill stays `foreign` |

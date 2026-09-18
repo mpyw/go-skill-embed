@@ -126,3 +126,48 @@ func TestUsageHintCounts(t *testing.T) {
 		t.Errorf("UsageHint() = %q, want %q", got, want)
 	}
 }
+
+// What was asked for goes to the output, and what went wrong goes to the error
+// output. `mytool skill list > skills.txt` should put the list in the file and
+// the complaint on the terminal, not the other way round.
+func TestOutputAndErrorOutputAreSeparate(t *testing.T) {
+	ctx := t.Context()
+	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
+	in := newCLIInstaller(t, WithOutput(out), WithErrorOutput(errOut))
+
+	reset := func() { out.Reset(); errOut.Reset() }
+
+	// Help was asked for, so it is what was wanted.
+	if err := in.Run(ctx, []string{"install", "-h"}); !errors.Is(err, ErrHelp) {
+		t.Fatalf("Run(install -h) = %v, want ErrHelp", err)
+	}
+	if !strings.Contains(out.String(), "Install the agent skills") {
+		t.Errorf("help did not reach the output:\n%s", out)
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("help reached the error output:\n%s", errOut)
+	}
+
+	// A bad flag is a mistake, and it is reported once.
+	reset()
+	if err := in.Run(ctx, []string{"install", "--bogus"}); err == nil {
+		t.Fatal("a bad flag was accepted")
+	}
+	if out.Len() != 0 {
+		t.Errorf("a diagnostic reached the output:\n%s", out)
+	}
+	if n := strings.Count(errOut.String(), "Usage:"); n != 1 {
+		t.Errorf("usage printed %d times:\n%s", n, errOut)
+	}
+
+	reset()
+	if err := in.Run(ctx, []string{"bogus"}); err == nil {
+		t.Fatal("an unknown subcommand was accepted")
+	}
+	if out.Len() != 0 {
+		t.Errorf("a diagnostic reached the output:\n%s", out)
+	}
+	if !strings.Contains(errOut.String(), "Usage:") {
+		t.Errorf("no usage on the error output:\n%s", errOut)
+	}
+}

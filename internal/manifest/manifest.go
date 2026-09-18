@@ -171,8 +171,29 @@ func With(src []byte, entries []Entry) []byte {
 	return out.Bytes()
 }
 
-// Strip removes the injected keys, so an installed manifest can be compared
-// against the embedded original.
+// Normalize returns the bytes two manifests must agree on to be the same
+// skill: the injected keys removed, and a frontmatter block that holds nothing
+// else removed with them.
+//
+// That second step is why it is not just Strip. With writes a block when the
+// source had none, and Strip alone cannot tell that block from one the source
+// already had. Removing an empty block on both sides makes the two spellings
+// of "no frontmatter" hash alike, so a skill whose manifest carries an empty
+// block no longer reads as modified the moment it is installed.
+func Normalize(src []byte) []byte {
+	src = Strip(src)
+	b := locate(src)
+	if !b.found || len(bytes.TrimSpace(src[b.start:b.end])) != 0 {
+		return src
+	}
+	var out bytes.Buffer
+	out.Write(src[:b.open])
+	out.Write(src[b.after:])
+	return out.Bytes()
+}
+
+// Strip removes the injected keys and nothing else. With uses it so that
+// stamping twice does not accumulate duplicates.
 func Strip(src []byte) []byte {
 	b := locate(src)
 	if !b.found {
@@ -195,14 +216,6 @@ func Strip(src []byte) []byte {
 		return src
 	}
 	var out bytes.Buffer
-	if len(bytes.TrimSpace(kept.Bytes())) == 0 {
-		// Nothing but the injected keys was in there, so With wrote the block
-		// itself. Removing the keys has to remove it too, or the manifest
-		// never hashes equal to the skill it came from again.
-		out.Write(src[:b.open])
-		out.Write(src[b.after:])
-		return out.Bytes()
-	}
 	out.Write(src[:b.start])
 	out.Write(kept.Bytes())
 	out.Write(src[b.end:])
@@ -210,7 +223,14 @@ func Strip(src []byte) []byte {
 }
 
 func isInjected(line []byte) bool {
-	key, _, ok := strings.Cut(strings.TrimRight(string(line), " \t\r"), ":")
+	text := strings.TrimRight(string(line), " \t\r")
+	// An indented line belongs to whatever is above it, which may be a block
+	// scalar holding a line that looks exactly like one of these keys. Fields
+	// skips those; this has to skip them for the same reason.
+	if text == "" || text[0] == ' ' || text[0] == '\t' {
+		return false
+	}
+	key, _, ok := strings.Cut(text, ":")
 	if !ok {
 		return false
 	}
