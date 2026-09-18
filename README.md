@@ -266,6 +266,24 @@ is a module of its own, so embedding skills never pulls cobra into your linter.
 | urfave/cli v3 | `github.com/mpyw/go-skill-embed/skillurfavev3` | `skillurfavev3.Command(skills)` |
 | urfave/cli v2 | `github.com/mpyw/go-skill-embed/skillurfavev2` | `skillurfavev2.Command(skills)` |
 
+> [!IMPORTANT]
+> `Intercept` and the adapters take the first argument. Check that `skill` does
+> not already mean something in your tool.
+>
+> | Your tool | Can `skill` already mean something else? |
+> | --- | --- |
+> | cobra or urfave/cli | No. The first argument is a subcommand |
+> | A `flag` tool with subcommands | No, for the same reason |
+> | A go/analysis driver | No. The first argument is a Go package pattern, and `skill` is not one |
+> | A tool that takes file names | **Yes**, if a file is called `skill` |
+>
+> `go` reads a bare name as an import path, not a directory, so a local package
+> is written `./skill` with or without this library.
+>
+> For the last row, reach the file as `./skill`, or rename the subcommand with
+> `WithCommandName`. A `flag` tool is worth giving subcommands anyway, and then
+> the row does not apply.
+
 > [!NOTE]
 > One thing the four front ends cannot agree on is a flag written after a
 > positional argument. `mytool skill install demo --dry-run` works under cobra
@@ -307,11 +325,6 @@ func main() {
 A `go vet -vettool=` run passes `-flags` or a config file path, so it is never
 affected. `examples/singlechecker` is a working driver that does this, with
 tests that run the real binary both ways.
-
-> [!NOTE]
-> The guard reads the first argument, so a package whose directory is literally
-> named `skill` is hidden by it. Write `./skill` instead, which the guard does
-> not match and every driver understands.
 
 ### cobra and urfave/cli
 

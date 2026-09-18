@@ -209,6 +209,14 @@ other project, and `~/.claude/skills` in particular is exactly where `--scope
 user` writes. Landing there is refused rather than allowed, because the
 alternative is a user-wide install that nothing announced.
 
+**Writing the first-argument guard up as a limitation.** The README used to say
+that a package directory named `skill` is hidden by it, which reads as
+something taken away. Nothing is. `go` reads a bare name as an import path and
+looks for it in the standard library, so `mylint skill` fails on a local
+`skill/` package with or without the guard. Measured: a driver with no guard
+answers `package skill is not in std`. The one real collision is a tool that
+takes file names, and the note says so.
+
 **Reaping the aside directory from a `defer`.** It looked like the one place
 that covers every path, and it covered one it should not have. When the swap
 fails and the restore fails too, the tree moved aside is the only copy left,
