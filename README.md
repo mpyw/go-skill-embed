@@ -108,12 +108,18 @@ them resolves to one directory. Each skill is written there once.
 | `detected` | `AgentSelectorDetected` | The agents whose directory is already there. The default |
 | `all` | `AgentSelectorAll` | Every agent, present or not |
 
+`--agent` is repeatable, and one value may be a comma separated list.
+`--agent claude-code --agent cursor` and `--agent claude-code,cursor` name the
+same two.
+
 `InstallOptions.Agents` holds `AgentSelector` values. `AgentSelectorFor` names
 one agent, so a caller reaches every form without writing a bare string.
 
 ```go
-Agents: []skillembed.AgentSelector{
-	skillembed.AgentSelectorFor(skillembed.AgentClaudeCode),
+options := skillembed.InstallOptions{
+	Agents: []skillembed.AgentSelector{
+		skillembed.AgentSelectorFor(skillembed.AgentClaudeCode),
+	},
 }
 ```
 
@@ -327,7 +333,7 @@ app := &cli.Command{
 | `WithToolName` | The binary's name | Recorded in `x-embedded-by` |
 | `WithVersion` | Empty | Recorded in `x-embedded-version` |
 | `WithCommandName` | `skill` | The subcommand `Run` and `Intercept` answer to |
-| `WithAgents` | All six | Restricts what `--agent` accepts |
+| `WithAgents` | All six | Restricts what `--agent` accepts, and which directories the project root search looks for |
 | `WithDefaultAgents` | `detected` | Used when `--agent` is absent |
 | `WithDefaultScope` | `project` | Used when `--scope` is absent |
 | `WithProjectRoot` | The searched project root | What project scope resolves against |
@@ -352,8 +358,10 @@ stop between skills when it is cancelled.
 
 ```go
 results, err := skills.Install(ctx, skillembed.InstallOptions{
-	Agents: []string{"claude-code"},
-	Scope:  skillembed.ScopeUser,
+	Agents: []skillembed.AgentSelector{
+		skillembed.AgentSelectorFor(skillembed.AgentClaudeCode),
+	},
+	Scope: skillembed.ScopeUser,
 })
 ```
 
@@ -370,6 +378,7 @@ tell a mistyped flag from a disk that is full.
 | `ErrUnknownSkill` | A named skill is not embedded |
 | `ErrNoAgentSelected` | The values resolved to nothing |
 | `ErrNeedsForce` | A destination was left alone. `ForceRequiredError` names them |
+| `ErrProjectIsHome` | Project scope resolved to the home directory |
 
 ## The skill for this library
 

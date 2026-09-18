@@ -71,6 +71,11 @@ run_test "lint" \
 run_test "declscope" \
     in_each_module bash -c 'go build ./... && declscope ./...'
 
+# A Go block in a document is hand written, so it drifts when a signature
+# changes and nothing says so.
+run_test "checkdocs" \
+    python3 scripts/checkdocs.py
+
 echo ""
 echo "===== Summary ====="
 if [ ${#failed_tests[@]} -eq 0 ]; then

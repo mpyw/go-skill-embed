@@ -146,8 +146,8 @@ costs more than it explains. Nothing else is suppressed.
 **Exporting an accessor to get a field across a file.** declscope's boundary
 rule only polices unexported declarations, so exporting something is the one
 guaranteed way to silence it. Each such accessor was a permanent public promise
-bought with a file split. The `Installer` fields that `cli.go`, `usage.go` and
-`agent.go` read carry a `//declscope:package` instead, which says the same
+bought with a file split. The `Installer` fields that another file
+reads carry a `//declscope:package` instead, which says the same
 thing in the source and costs nothing outside the module. `CommandName`,
 `ToolName`, `DefaultScope` and `AgentChoices` stay exported, because an adapter
 in another module really does need them.
@@ -174,11 +174,17 @@ before the tool's own flags exist, and it can reach neither `flag.Usage` nor an
 analyzer's `Doc`. `UsageHint` is a line the tool prints itself, and
 `examples/singlechecker` shows where it goes.
 
+`scripts/checkdocs.py` compiles every Go block in the documents. A block is
+hand written, so it drifts when a signature or a type changes, and twice it
+did: once when `Install` gained a second return value, and once when
+`InstallOptions.Agents` became `[]AgentSelector`. Both were found by a reader
+rather than by the suite.
+
 `scripts/regolden.py` rewrites the Output comments that hold help text. They
 are goldens, and a flag or a default changing moves all four at once. Editing
 them by hand invites a typo that reads as a real difference.
 
-revive runs with `exported` and `package-comments` on top of the standard
+revive runs with `unused-receiver`, `exported` and `package-comments` on top of the standard
 linters. The rename that produced the current names reached doc comments as
 well as declarations, and left two of them starting with the wrong word.
 Nothing else in the standard set looks at that.
