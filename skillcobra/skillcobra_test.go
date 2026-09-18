@@ -75,7 +75,7 @@ func ExampleCommand() {
 	//   mytool skill install [skill...] [flags]
 	//
 	// Flags:
-	//       --agent strings   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all
+	//       --agent strings   Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all, or detected
 	//       --dir string      Install to a custom directory (overrides --agent and --scope)
 	//       --dry-run         Report what would happen without writing
 	//   -f, --force           Overwrite existing skills

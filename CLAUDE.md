@@ -48,6 +48,18 @@ only way `Strip` can restore the file byte for byte, and without that a skill
 whose `SKILL.md` had no frontmatter reads as `modified` the moment it is
 installed. `ExampleInstaller_Status` is what caught it.
 
+**Taking `gh skill install`'s default agent along with its flags.** It is
+`github-copilot`, and `gh` prompts for the agent whenever it can. A tool that
+embeds its skills is rarely able to prompt, and that default writes only
+`.agents/skills`, which Claude Code does not read. A Claude Code user running
+`mylint skill install` would have seen a success and got nothing. The default
+is `detected`, which falls back to `all`.
+
+`gh` does no agent detection at all. Measured: with `.claude/skills` already in
+the working directory, `gh skill install --from-local` still wrote
+`.agents/skills`. The help's "auto-discovered" is about finding skills in a
+repository, not about finding agents.
+
 ## Things that look wrong but are not
 
 The `replace` directives in the adapter modules point at `../`. Go ignores a
@@ -69,6 +81,10 @@ should read as if the host framework wrote it.
 before the tool's own flags exist, and it can reach neither `flag.Usage` nor an
 analyzer's `Doc`. `UsageHint` is a line the tool prints itself, and
 `examples/singlechecker` shows where it goes.
+
+`scripts/regolden.py` rewrites the Output comments that hold help text. They
+are goldens, and a flag or a default changing moves all four at once. Editing
+them by hand invites a typo that reads as a real difference.
 
 revive runs with `exported` and `package-comments` on top of the standard
 linters. The rename that produced the current names reached doc comments as

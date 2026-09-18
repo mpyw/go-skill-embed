@@ -256,3 +256,52 @@ func TestSkillWithoutFrontmatterInstallsClean(t *testing.T) {
 		t.Errorf("state after install = %s, want %s", statuses[0].State, skillembed.StateUpToDate)
 	}
 }
+
+// The default is "detected". It keeps the agents already present, and falls
+// back to every agent when there is nothing to go on.
+func TestDefaultAgentDetects(t *testing.T) {
+	in, root := newInstaller(t)
+	agents := filepath.Join(root, ".agents", "skills")
+	claude := filepath.Join(root, ".claude", "skills")
+
+	// Nothing is there yet. At project scope the fallback is two directories,
+	// because five of the six agents share one.
+	targets, err := in.Targets(skillembed.InstallOptions{Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	served := map[string]int{}
+	for _, tg := range targets {
+		served[tg.Dir] = len(tg.Agents)
+	}
+	if want := map[string]int{agents: 5, claude: 1}; len(served) != len(want) {
+		t.Fatalf("with nothing present, got %v, want %v", served, want)
+	}
+	if served[agents] != 5 || served[claude] != 1 {
+		t.Errorf("got %v, want .agents/skills for 5 agents and .claude/skills for 1", served)
+	}
+
+	// A repository that already has .claude is a Claude Code repository.
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targets, err = in.Targets(skillembed.InstallOptions{Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Dir != claude {
+		t.Fatalf("got %d targets (%+v), want only .claude/skills", len(targets), targets)
+	}
+	if len(targets[0].Agents) != 1 || targets[0].Agents[0].Name != "claude-code" {
+		t.Errorf("target serves %+v, want claude-code alone", targets[0].Agents)
+	}
+
+	// "all" ignores what is present.
+	targets, err = in.Targets(skillembed.InstallOptions{Agents: []string{"all"}, Scope: "project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 {
+		t.Errorf("all gave %d targets, want 2", len(targets))
+	}
+}

@@ -65,6 +65,24 @@ The directories match `gh skill install`.
 Five of the six share `.agents/skills` at project scope. Selecting several of
 them resolves to one directory. Each skill is written there once.
 
+`--agent` also takes two words.
+
+| Value | Meaning |
+| --- | --- |
+| `detected` | The agents whose directory is already there. The default |
+| `all` | Every agent, present or not |
+
+`detected` falls back to `all` when it finds nothing, so a fresh repository
+still gets its skills. In a repository that already holds `.claude`, only
+Claude Code is written to. In a home directory it is the agents in use, rather
+than six directories of which most are litter.
+
+> [!NOTE]
+> `gh skill install` defaults to `github-copilot`, and prompts for the agent
+> when it can. A tool that embeds its skills is rarely able to prompt, and that
+> default writes only `.agents/skills`, which Claude Code does not read.
+> `WithDefaultAgents` changes this if you want the `gh` behaviour.
+
 Claude Code moves its whole configuration with `CLAUDE_CONFIG_DIR`. User scope
 follows that variable when it is set.
 
@@ -81,7 +99,7 @@ Usage:
 
 Flags:
   -agent value
-    	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all (repeatable) (default "github-copilot")
+    	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all, or detected (repeatable) (default "detected")
   -dir string
     	Install to a custom directory (overrides -agent and -scope)
   -dry-run

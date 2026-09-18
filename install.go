@@ -60,7 +60,16 @@ func WithAgents(agents ...Agent) InstallerOption {
 }
 
 // WithDefaultAgents sets the agents used when --agent is not given. It
-// defaults to github-copilot, matching `gh skill install`.
+// defaults to "detected".
+//
+// `gh skill install` defaults to github-copilot, and prompts when it can. A
+// tool that embeds its skills is rarely in a position to prompt, and that
+// default writes only .agents/skills, which Claude Code does not read.
+//
+// "detected" keeps the agents whose directory is already there, and falls back
+// to "all" when it finds none. In a fresh repository that is two directories
+// and reaches everything. In a home directory it is the agents in use, rather
+// than six directories of which most are litter.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithDefaultAgents(names ...string) InstallerOption {
@@ -106,7 +115,7 @@ func NewInstaller(set *SkillSet, opts ...InstallerOption) *Installer {
 		set:          set,
 		commandName:  "skill",
 		agents:       DefaultAgents(),
-		defaultAgent: []string{AgentGitHubCopilot.Name},
+		defaultAgent: []string{"detected"},
 		defaultScope: ScopeProject,
 		metadata:     true,
 		executable:   skillfs.HasShebang,
@@ -209,10 +218,22 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 	if len(names) == 0 {
 		names = in.defaultAgent
 	}
-	agents, err := agentsByName(in.agents, names)
+	// An agent counts as present when the directory holding its skills
+	// directory is there. The skills directory itself need not be.
+	detected := func(a Agent) bool {
+		dir, err := a.Dir(scope, in.projectRoot)
+		if err != nil {
+			return false
+		}
+		info, err := os.Stat(filepath.Dir(dir))
+		return err == nil && info.IsDir()
+	}
+
+	agents, err := agentsByName(in.agents, names, detected)
 	if err != nil {
 		return nil, err
 	}
+	agents = agentsFallBackToAll(in.agents, agents, names)
 	if len(agents) == 0 {
 		return nil, errors.New("no agent selected")
 	}

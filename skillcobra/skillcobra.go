@@ -76,7 +76,7 @@ func list(in *skillembed.Installer) *cobra.Command {
 // bind registers the flags shared by every subcommand.
 func bind(cmd *cobra.Command, in *skillembed.Installer, o *skillembed.InstallOptions) {
 	f := cmd.Flags()
-	f.StringSliceVar(&o.Agents, "agent", nil, "Target agent: "+in.AgentChoices()+", or all")
+	f.StringSliceVar(&o.Agents, "agent", nil, "Target agent: "+in.AgentChoices()+", or all, or detected")
 	f.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides --agent and --scope)")
 	f.StringVar(&o.Scope, "scope", string(in.DefaultScope()), "Installation scope: {project|user}")
 	f.BoolVarP(&o.Force, "force", "f", false, "Overwrite existing skills")

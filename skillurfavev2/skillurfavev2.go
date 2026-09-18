@@ -71,7 +71,7 @@ func list(in *skillembed.Installer) *cli.Command {
 // flags are the ones every subcommand shares.
 func flags(in *skillembed.Installer) []cli.Flag {
 	return []cli.Flag{
-		&cli.StringSliceFlag{Name: "agent", Usage: "Target agent: " + in.AgentChoices() + ", or all"},
+		&cli.StringSliceFlag{Name: "agent", Usage: "Target agent: " + in.AgentChoices() + ", or all, or detected"},
 		&cli.StringFlag{Name: "dir", Usage: "Install to a custom directory (overrides --agent and --scope)"},
 		&cli.StringFlag{Name: "scope", Value: string(in.DefaultScope()), Usage: "Installation scope: {project|user}"},
 		&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite existing skills"},

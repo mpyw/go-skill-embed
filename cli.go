@@ -114,7 +114,7 @@ func (r cliRepeatable) Set(v string) error {
 // bindCLIFlags registers the flags `gh skill install` defines, so the two read
 // the same way.
 func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
-	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all (repeatable) (default %q)",
+	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
 		in.AgentChoices(), strings.Join(in.DefaultAgentNames(), ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
 	fs.StringVar(&o.Scope, "scope", string(in.DefaultScope()), "Installation scope: {project|user}")

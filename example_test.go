@@ -167,7 +167,7 @@ func ExampleInstaller_Run() {
 	//
 	// Flags:
 	//   -agent value
-	//     	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all (repeatable) (default "github-copilot")
+	//     	Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all, or detected (repeatable) (default "detected")
 	//   -dir string
 	//     	Install to a custom directory (overrides -agent and -scope)
 	//   -dry-run

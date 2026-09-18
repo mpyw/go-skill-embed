@@ -126,6 +126,25 @@ func DefaultAgents() []Agent {
 // that writes its own flag help uses it to name the same agents.
 func (in *Installer) AgentChoices() string { return agentChoices(in.Agents()) }
 
+// agentsFallBackToAll is the answer when "detected" found nothing. A machine
+// with no agent directory is one where any guess is as good as another, and
+// doing nothing would read as a failure.
+//
+//declscope:package // install.go applies it after resolving the agents
+func agentsFallBackToAll(known, resolved []Agent, values []string) []Agent {
+	if len(resolved) > 0 {
+		return resolved
+	}
+	for _, v := range values {
+		for _, name := range strings.Split(v, ",") {
+			if strings.TrimSpace(name) == "detected" {
+				return known
+			}
+		}
+	}
+	return resolved
+}
+
 // agentChoices renders the --agent help string, such as {a|b|c}.
 func agentChoices(agents []Agent) string {
 	names := make([]string, len(agents))
@@ -135,11 +154,14 @@ func agentChoices(agents []Agent) string {
 	return "{" + strings.Join(names, "|") + "}"
 }
 
-// agentsByName maps --agent values to agents. The special value "all" expands
-// to every agent the installer offers.
+// agentsByName maps --agent values to agents.
 //
-//declscope:package // the command line's agent vocabulary, read by installer.go
-func agentsByName(known []Agent, values []string) ([]Agent, error) {
+// "all" expands to every agent the installer offers. "detected" keeps the ones
+// whose directory already exists, and expands to all when that finds nothing,
+// so the command still does something on a machine with no agent set up.
+//
+//declscope:package // the command line's agent vocabulary, read by install.go
+func agentsByName(known []Agent, values []string, detected func(Agent) bool) ([]Agent, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -155,8 +177,11 @@ func agentsByName(known []Agent, values []string) ([]Agent, error) {
 			if name == "" {
 				continue
 			}
-			if name == "all" {
+			if name == "all" || name == "detected" {
 				for _, a := range known {
+					if name == "detected" && detected != nil && !detected(a) {
+						continue
+					}
 					if !seen[a.Name] {
 						seen[a.Name] = true
 						out = append(out, a)
@@ -171,7 +196,7 @@ func agentsByName(known []Agent, values []string) ([]Agent, error) {
 					valid = append(valid, k.Name)
 				}
 				sort.Strings(valid)
-				return nil, fmt.Errorf("unknown agent %q (want one of %s, or all)", name, strings.Join(valid, ", "))
+				return nil, fmt.Errorf("unknown agent %q (want one of %s, or all, or detected)", name, strings.Join(valid, ", "))
 			}
 			if !seen[a.Name] {
 				seen[a.Name] = true
