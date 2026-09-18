@@ -193,6 +193,16 @@ over an in-memory buffer. errcheck's default exclusions cover `bytes.Buffer`
 and `os.Stderr` but not `tabwriter`. The write that can actually fail is the
 one to the real writer, and that one is checked.
 
+**Resolving project scope against the working directory.** A linter is run from
+a subdirectory as often as from the root, and a plain working directory put the
+skills wherever that was. The search walks up to the repository root instead.
+
+**Allowing the search to land on the home directory.** The user scope
+directories are there, so a project installation would sit in front of every
+other project, and `~/.claude/skills` in particular is exactly where `--scope
+user` writes. Landing there is refused rather than allowed, because the
+alternative is a user-wide install that nothing announced.
+
 ## Known and left alone
 
 An adversarial review raised these. They are recorded so the next reader does

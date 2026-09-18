@@ -22,10 +22,12 @@ type Installer struct {
 	version      string
 	commandName  string
 	defaultScope Scope
-	projectRoot  string
-	metadata     bool
-	executable   func(name string, data []byte) bool
-	now          func() time.Time
+	// Read by project.go, which searches for a root when this is empty.
+	//declscope:package
+	projectRoot string
+	metadata    bool
+	executable  func(name string, data []byte) bool
+	now         func() time.Time
 
 	// What the front end sees. cli.go, usage.go and agent.go read these to
 	// build help and to decide where to write. The fields above are
@@ -91,8 +93,13 @@ func WithDefaultAgents(selectors ...AgentSelector) InstallerOption {
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithDefaultScope(s Scope) InstallerOption { return func(i *Installer) { i.defaultScope = s } }
 
-// WithProjectRoot overrides the directory project scope resolves against. It
-// defaults to the working directory.
+// WithProjectRoot sets the directory project scope resolves against.
+//
+// Without it the root is searched for: the walk starts at the working
+// directory and stops at the repository root, and the first directory already
+// holding an agent directory wins. Outside a repository the working directory
+// is the only candidate. The home directory is refused, since the user scope
+// directories live there.
 //
 //declscope:ignore qualify // With* is Go's option idiom, and InstallerWithToolName reads worse at every call site
 func WithProjectRoot(dir string) InstallerOption { return func(i *Installer) { i.projectRoot = dir } }
@@ -226,10 +233,15 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 	if len(names) == 0 {
 		names = in.defaultAgent
 	}
+	root, err := in.projectRootOf(scope)
+	if err != nil {
+		return nil, err
+	}
+
 	// An agent counts as present when the directory holding its skills
 	// directory is there. The skills directory itself need not be.
 	detected := func(a Agent) bool {
-		dir, err := a.Dir(scope, in.projectRoot)
+		dir, err := a.Dir(scope, root)
 		if err != nil {
 			return false
 		}
@@ -249,7 +261,7 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 	var targets []InstallTarget
 	index := map[string]int{}
 	for _, a := range agents {
-		dir, err := a.Dir(scope, in.projectRoot)
+		dir, err := a.Dir(scope, root)
 		if err != nil {
 			return nil, err
 		}

@@ -82,6 +82,22 @@ The directories match `gh skill install`.
 | `gemini` | `.agents/skills` | `~/.gemini/skills` |
 | `antigravity` | `.agents/skills` | `~/.gemini/antigravity/skills` |
 
+> [!IMPORTANT]
+> Project scope resolves against the project, not against the working
+> directory.
+>
+> | Where the command runs | Where the skills go |
+> | --- | --- |
+> | A directory already holding `.agents` or `.claude` | That directory |
+> | Anywhere else inside a repository | The repository root |
+> | Outside a repository | The working directory |
+> | The home directory | Refused, with `ErrProjectIsHome` |
+>
+> The search walks up from the working directory and stops at the repository
+> root. The home directory holds the user scope directories, so a project
+> installation there would sit in front of every other project. `--scope user`
+> writes there on purpose, and `--dir` names any directory outright.
+
 Five of the six share `.agents/skills` at project scope. Selecting several of
 them resolves to one directory. Each skill is written there once.
 
@@ -314,7 +330,7 @@ app := &cli.Command{
 | `WithAgents` | All six | Restricts what `--agent` accepts |
 | `WithDefaultAgents` | `detected` | Used when `--agent` is absent |
 | `WithDefaultScope` | `project` | Used when `--scope` is absent |
-| `WithProjectRoot` | The working directory | What project scope resolves against |
+| `WithProjectRoot` | The searched project root | What project scope resolves against |
 | `WithMetadata` | On | Writes the four `x-embedded-*` keys |
 | `WithExecutable` | Shebang test | Decides which files become executable |
 | `WithOutput` | `os.Stdout` | Where `Run` writes the report and the help |
