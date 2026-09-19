@@ -11,4 +11,4 @@
 [tools]
 go = "1.27.1"
 golangci-lint = "2.13.1"
-"go:github.com/mpyw/declscope/cmd/declscope" = "0.6.1"
+"go:github.com/mpyw/declscope/cmd/declscope" = "0.8.0"
