@@ -94,8 +94,9 @@ executable bit. `foreign` covers a hand-written skill, a directory with no
 > version installed, so `install` removes it. Tell your users, and say it in
 > your own release notes when you drop one.
 >
-> It is claimed only on this tool's own stamp with a digest that still checks
-> out, and only for a name the binary no longer carries. A copy of a skill it
+> It is claimed only on where this tool put the directory: `x-embedded-by`
+> names this tool, `x-embedded-name` names the skill, and install writes a
+> skill into a directory of that same name. A copy of a skill it
 > still carries, a hand-written directory, another tool's, and anything
 > `.`-prefixed are all left alone. `install <name>` sweeps nothing.
 

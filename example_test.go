@@ -177,9 +177,9 @@ func ExampleInstaller_Run() {
 	//     	Install to a custom directory (overrides -agent and -scope)
 	//   -dry-run
 	//     	Report what would happen without writing
-	//   -f	Overwrite existing skills (shorthand)
+	//   -f	Overwrite or remove existing skills (shorthand)
 	//   -force
-	//     	Overwrite existing skills
+	//     	Overwrite or remove existing skills
 	//   -scope value
 	//     	Installation scope: {project|user} (default project)
 	//

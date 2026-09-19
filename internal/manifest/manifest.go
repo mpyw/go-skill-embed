@@ -18,13 +18,18 @@ const FileName = "SKILL.md"
 // collide with the source tracking keys `gh skill install` writes.
 const (
 	KeyEmbeddedBy      = "x-embedded-by"
+	KeyEmbeddedName    = "x-embedded-name"
 	KeyEmbeddedVersion = "x-embedded-version"
 	KeyEmbeddedAt      = "x-embedded-at"
 	KeyEmbeddedDigest  = "x-embedded-digest"
 )
 
 // InjectedKeys are the keys With writes and Strip removes.
-var InjectedKeys = []string{KeyEmbeddedBy, KeyEmbeddedVersion, KeyEmbeddedAt, KeyEmbeddedDigest}
+//
+// Strip runs before a directory is hashed, so adding a key here does not move
+// any digest: a manifest written before the key existed hashes the same as one
+// written after it.
+var InjectedKeys = []string{KeyEmbeddedBy, KeyEmbeddedName, KeyEmbeddedVersion, KeyEmbeddedAt, KeyEmbeddedDigest}
 
 // Entry is one key and value to inject.
 type Entry struct {

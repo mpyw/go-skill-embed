@@ -1851,6 +1851,68 @@ func TestAnOrphanThatCannotBeHashedIsForeign(t *testing.T) {
 	}
 }
 
+// editedInstaller carries the same skills with different contents, the way a
+// release that revised them does.
+func editedInstaller(t *testing.T, root string) *skillembed.Installer {
+	t.Helper()
+	files := fstest.MapFS{}
+	err := fs.WalkDir(installTestSkills, "testdata/skills", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := installTestSkills.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		files[p] = &fstest.MapFile{Data: append(data, []byte("\nA line the next release added.\n")...)}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(files, "testdata/skills"),
+		skillembed.WithToolName("testtool"),
+		skillembed.WithVersion("v2.0.0"),
+		skillembed.WithProjectRoot(root),
+		skillembed.WithOutput(&bytes.Buffer{}),
+	)
+}
+
+// A guard that reads the contents expires. Once the tool ships a revision of
+// the skill, the copy's stamped digest is no longer one the binary writes, and
+// a guard resting on that lets the copy be deleted by the release after next.
+// The earlier test missed this by reusing one installer, so the digests never
+// moved.
+func TestACopySurvivesTheSkillBeingRevisedUpstream(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	for _, from := range []string{"demo-skill", "bare-skill"} {
+		copyTree(t, filepath.Join(dir, from), filepath.Join(dir, from+"-wip"))
+	}
+
+	next := editedInstaller(t, root)
+	results, err := next.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.Action == skillembed.ActionRemoved {
+			t.Errorf("removed %s after the skill was revised upstream", r.Path)
+		}
+	}
+	for _, from := range []string{"demo-skill", "bare-skill"} {
+		if _, err := os.Stat(filepath.Join(dir, from+"-wip", skillembed.SkillFile)); err != nil {
+			t.Errorf("the copy of %s is gone: %v", from, err)
+		}
+	}
+}
+
 // The digest covers contents, not the directory name, so a copy of an
 // installed skill carries a valid stamp under whatever name the user gave it.
 // Sweeping on the stamp alone took away a working copy somebody made on
@@ -1886,9 +1948,34 @@ func TestACopyOfALiveSkillIsNotAnOrphan(t *testing.T) {
 	}
 }
 
-// The sparing above must not reach a skill the binary really has dropped, even
-// when the user renamed its directory.
-func TestARenamedDropOfASkillIsStillSwept(t *testing.T) {
+// A directory is claimed on where this tool put it, so a rename by the tool
+// and a rename by the user part company. The tool renaming a skill leaves the
+// old directory exactly where it was written, under the name it was written
+// with, and that is swept even when the contents did not change at all.
+func TestASkillTheToolRenamedIsSwept(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+
+	// bare-skill has no name field of its own, and its contents are untouched,
+	// so only what install recorded can say which skill the directory holds.
+	next := reducedInstaller(t, root, "demo-skill")
+	if _, err := next.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bare-skill")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the dropped skill survived: %v", err)
+	}
+}
+
+// A directory the user renamed is no longer where this tool put it, and it
+// reads exactly like a copy they made. Claiming it on the stamp alone deleted
+// work nobody asked about, so it is left where it is.
+func TestADirectoryTheUserRenamedIsLeftAlone(t *testing.T) {
 	ctx := t.Context()
 	old, root := newInstaller(t)
 	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
@@ -1902,11 +1989,17 @@ func TestARenamedDropOfASkillIsStillSwept(t *testing.T) {
 	}
 
 	next := reducedInstaller(t, root, "demo-skill")
-	if _, err := next.Install(ctx, opts); err != nil {
+	results, err := next.Install(ctx, opts)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(renamed); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("a dropped skill survived because it had been renamed: %v", err)
+	for _, r := range results {
+		if r.Path == renamed {
+			t.Errorf("the sweep reported a directory the user renamed: %s", r.Action)
+		}
+	}
+	if _, err := os.Stat(renamed); err != nil {
+		t.Errorf("a directory the user renamed is gone: %v", err)
 	}
 }
 
@@ -1959,5 +2052,43 @@ func copyTree(t *testing.T, from, to string) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// list prints an orphan's name, so uninstall has to accept it. Resolving names
+// against the embedded set alone told the user that a skill the tool had just
+// listed does not exist, and left a blanket --force over everything as the
+// only way to reach it.
+func TestAnOrphanCanBeNamed(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	next := reducedInstaller(t, root, "demo-skill")
+
+	named := opts
+	named.Names = []string{"bare-skill"}
+	results, err := next.Uninstall(ctx, named)
+	if err != nil {
+		t.Fatalf("Uninstall = %v, want nil", err)
+	}
+	if got := actionFor(results, "bare-skill"); got != skillembed.ActionRemoved {
+		t.Errorf("action = %s, want %s", got, skillembed.ActionRemoved)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bare-skill")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the named orphan survived: %v", err)
+	}
+	// Naming one must not take the rest with it.
+	if _, err := os.Stat(filepath.Join(dir, "demo-skill")); err != nil {
+		t.Errorf("a skill that was not named was removed: %v", err)
+	}
+
+	unknown := opts
+	unknown.Names = []string{"never-existed"}
+	if _, err := next.Status(ctx, unknown); !errors.Is(err, skillembed.ErrUnknownSkill) {
+		t.Errorf("Status = %v, want ErrUnknownSkill", err)
 	}
 }

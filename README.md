@@ -240,6 +240,7 @@ Every installed `SKILL.md` gains four frontmatter keys.
 
 ```yaml
 x-embedded-by: mytool
+x-embedded-name: my-skill
 x-embedded-version: v0.1.0
 x-embedded-at: "2026-09-18T16:09:53Z"
 x-embedded-digest: "sha256:f6e4b378de0150621e981fd1b165edd04089cb3caac89b963308717ec71f8114"
@@ -264,21 +265,27 @@ copy and its embedded original hash the same.
 > so `install` would pass it by, `list` would not mention it, and `uninstall`
 > would leave it there for good.
 >
-> `install` therefore removes it. The claim rests on the same evidence every
-> other state rests on, the installed `SKILL.md` naming this tool in
-> `x-embedded-by` with a digest that still matches its contents. A
-> hand-written directory, another tool's, and anything that is not a skill
+> `install` therefore removes it. The claim rests on where this tool put the
+> directory: the installed `SKILL.md` names this tool in `x-embedded-by`, and
+> names the skill it holds in `x-embedded-name`, which install always writes
+> into a directory of that same name. A copy the user made under a name of
+> their own disagrees, and is left alone however its contents read. Nothing
+> about the contents can stand in for this — the digest does not cover the
+> directory name, so every copy of an installed skill hashes as the original.
+>
+> A hand-written directory, another tool's, and anything that is not a skill
 > directory at all are left where they are.
 >
 > | | |
 > | --- | --- |
 > | `install` | Removes it, and says so |
-> | `install <name>` | Leaves it. The run is about the named skills |
+> | `install <name>` | Leaves it, unless it is one of the names. `list` prints orphans, so `uninstall <name>` reaches one |
 > | `install --dry-run` | Reports the removal without making it |
 > | `uninstall` | Removes it, so a full uninstall leaves nothing this tool wrote. An edited or unreadable one still needs `--force`, and `uninstall` exits 0 either way |
 > | Edited since it was installed | Reads as `modified`, so it needs `--force` |
 > | Unreadable, such as one holding a symlink | Reads as `foreign`, so it needs `--force` |
 > | A `.`-prefixed directory beside the skills | Left alone, including a rescue copy |
+> | Under a name other than the one it was installed as | Left alone, whatever it holds |
 >
 > This applies to both scopes, and to `--dir`.
 
@@ -404,7 +411,7 @@ app := &cli.Command{
 | `WithDefaultAgents` | `detected` | Used when `--agent` is absent |
 | `WithDefaultScope` | `project` | Used when `--scope` is absent |
 | `WithProjectRoot` | The searched project root | What project scope resolves against |
-| `WithMetadata` | On | Writes the four `x-embedded-*` keys |
+| `WithMetadata` | On | Writes the `x-embedded-*` keys |
 | `WithExecutable` | Shebang test | Decides which files become executable |
 | `WithOutput` | `os.Stdout` | Where `Run` writes the report and the help |
 | `WithErrorOutput` | `os.Stderr` | Where `Run` writes a complaint and the usage |

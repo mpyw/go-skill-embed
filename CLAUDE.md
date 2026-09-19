@@ -116,6 +116,30 @@ rescue copy is a whole installation, stamp and all, so it reads as an orphan.
 It is also the only copy left, and the error that abandoned it names it for
 the user to recover. Every dot-prefixed entry is passed over.
 
+**Claiming an orphan on anything the contents can say.** Two rounds of it
+were wrong in opposite directions. The digest covers contents and not the
+directory name, so every copy of an installed skill hashes as the original and
+was swept; sparing a copy whose digest the binary still writes then expired
+the moment the skill was revised upstream, and sparing one whose `name` field
+resolves left a skill with no `name` field unprotected. The other way, a tool
+renaming a skill without touching its files left the old directory hashing as
+the new one, so it was never swept and the agent saw both forever.
+`x-embedded-name` records which skill install placed there, and install always
+writes a skill into a directory of its own name, so the claim is now "this is
+where I put it" rather than a guess from the bytes.
+
+**Reading the recorded name from `name` alone.** It is what an installation
+written before `x-embedded-name` existed has, and it is the fallback, but a
+skill whose `SKILL.md` carries no `name` field has nothing to fall back to.
+Such a directory is left alone rather than guessed at, which loses the sweep
+for that one combination and never loses the user's work.
+
+**Refusing a name that `list` printed.** `uninstall` resolved names against
+the embedded set alone, so a name the tool had just listed as `orphaned` came
+back as unknown, and a blanket `--force` over everything was the only way to
+reach it. Orphans are found before the names are resolved, and one can be
+named. A named run still acts on the names and nothing else.
+
 **Claiming an orphan on the stamp and the digest alone.** The digest covers
 contents, not the directory name, so every copy of an installed skill carries
 a stamp that checks out. `cp -R demo-skill demo-skill-wip` was therefore
@@ -335,6 +359,7 @@ disk. That one is not on the list below: `projectroot.Within` refuses it.
 | A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
 | A user's own `chmod +x` is reverted | The state is `outdated` either way, and install repairs it without asking |
 | `uninstall` exits 0 where `install` exits 1 | Both skip a blocked destination and say so. Only install treats it as a failure. It follows that `uninstall` can leave an edited orphan behind and still exit 0, which the README now states rather than promising an empty directory |
+| A skill installed before `x-embedded-name` existed, carrying no `name` field, and since dropped, is never swept | Nothing records which skill the directory holds, and the name it sits under reads the same as a copy the user made. It is left where it is. Installing again re-stamps everything still carried, so only a dropped one stays in this state |
 | Names differing only by Unicode normalization are not caught | `strings.ToLower` is not the file system's equivalence relation. It catches the ASCII case, which is the one that happens |
 | `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |
 | `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it. `ErrNoAgentSelected` at least makes it matchable |

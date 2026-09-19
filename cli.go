@@ -182,8 +182,8 @@ func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 		in.AgentChoices(), strings.Join(cliSelectorNames(in.defaultAgent), ",")))
 	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
 	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
-	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
-	fs.BoolVar(&o.Force, "f", false, "Overwrite existing skills (shorthand)")
+	fs.BoolVar(&o.Force, "force", false, "Overwrite or remove existing skills")
+	fs.BoolVar(&o.Force, "f", false, "Overwrite or remove existing skills (shorthand)")
 	fs.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
 }
 

@@ -123,6 +123,6 @@ func bind(cmd *cobra.Command, in *skillembed.Installer, o *skillembed.InstallOpt
 	f.Var(agentsValue{&o.Agents}, "agent", "Target agent: "+in.AgentChoices()+", or all, or detected")
 	f.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides --agent and --scope)")
 	f.Var(scopeValue{&o.Scope}, "scope", "Installation scope: {project|user}")
-	f.BoolVarP(&o.Force, "force", "f", false, "Overwrite existing skills")
+	f.BoolVarP(&o.Force, "force", "f", false, "Overwrite or remove existing skills")
 	f.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
 }

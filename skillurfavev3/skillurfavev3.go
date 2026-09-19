@@ -78,7 +78,7 @@ func flags(in *skillembed.Installer) []cli.Flag {
 		&cli.StringSliceFlag{Name: "agent", Usage: "Target agent: " + in.AgentChoices() + ", or all, or detected"},
 		&cli.StringFlag{Name: "dir", Usage: "Install to a custom directory (overrides --agent and --scope)"},
 		&cli.StringFlag{Name: "scope", Value: string(in.DefaultScope()), Usage: "Installation scope: {project|user}"},
-		&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite existing skills"},
+		&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite or remove existing skills"},
 		&cli.BoolFlag{Name: "dry-run", Usage: "Report what would happen without writing"},
 	}
 }

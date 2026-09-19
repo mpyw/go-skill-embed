@@ -81,7 +81,7 @@ func ExampleCommand() {
 	//    --agent string [ --agent string ]  Target agent: {github-copilot|claude-code|cursor|codex|gemini|antigravity}, or all, or detected
 	//    --dir string                       Install to a custom directory (overrides --agent and --scope)
 	//    --scope string                     Installation scope: {project|user} (default: "project")
-	//    --force, -f                        Overwrite existing skills
+	//    --force, -f                        Overwrite or remove existing skills
 	//    --dry-run                          Report what would happen without writing
 	//    --help, -h                         show help
 }

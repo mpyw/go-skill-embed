@@ -303,7 +303,12 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 }
 
 // selected resolves o.Names against the embedded set.
-func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
+//
+// alsoInstalled holds the names found at the destinations that the set does
+// not carry. A name in there is an orphan, which has a row of its own and no
+// embedded skill behind it, so it is accepted here and skipped rather than
+// called unknown. Listing a name and then refusing it is the worse answer.
+func (in *Installer) selected(o InstallOptions, alsoInstalled map[string]bool) ([]Skill, error) {
 	if len(o.Names) == 0 {
 		return in.set.Skills(), nil
 	}
@@ -311,6 +316,9 @@ func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
 	for _, name := range o.Names {
 		sk, ok := in.set.Lookup(name)
 		if !ok {
+			if alsoInstalled[name] {
+				continue
+			}
 			available := in.set.Names()
 			sort.Strings(available)
 			return nil, fmt.Errorf("%w %q (embedded: %s)", ErrUnknownSkill, name, strings.Join(available, ", "))
@@ -344,12 +352,34 @@ func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallSta
 	if err != nil {
 		return nil, err
 	}
-	skills, err := in.selected(o)
+
+	// Found before the names are resolved. List prints these, so a name it
+	// printed has to be one uninstall accepts, and the set alone cannot say
+	// whether a name exists.
+	orphansAt := make([][]InstallStatus, len(targets))
+	alsoInstalled := map[string]bool{}
+	for i, t := range targets {
+		orphans, err := in.orphaned(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		orphansAt[i] = orphans
+		for _, st := range orphans {
+			alsoInstalled[st.Skill.Name] = true
+		}
+	}
+
+	skills, err := in.selected(o, alsoInstalled)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]InstallStatus, 0, len(targets)*len(skills))
-	for _, t := range targets {
+	wanted := make(map[string]bool, len(o.Names))
+	for _, name := range o.Names {
+		wanted[name] = true
+	}
+
+	out := make([]InstallStatus, 0, len(targets)*(len(skills)+1))
+	for i, t := range targets {
 		for _, sk := range skills {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -360,17 +390,15 @@ func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallSta
 			}
 			out = append(out, st)
 		}
-		// Only a run over the whole set knows what is missing from it. `install
-		// demo` is about demo, and sweeping the directory on the way past would
-		// remove skills the run was never asked about.
-		if len(o.Names) > 0 {
-			continue
+		for _, st := range orphansAt[i] {
+			// A named run acts on what it was told to. `install demo` is about
+			// demo, and sweeping the directory on the way past would remove
+			// skills the run was never asked about.
+			if len(o.Names) > 0 && !wanted[st.Skill.Name] {
+				continue
+			}
+			out = append(out, st)
 		}
-		orphans, err := in.orphaned(ctx, t)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, orphans...)
 	}
 	return out, nil
 }
@@ -403,15 +431,7 @@ func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallSt
 	// just wrote. os.SameFile settles it without this having to guess what the
 	// file system treats as equal.
 	embedded := make([]os.FileInfo, 0, in.set.Len())
-	// What the binary still writes. The digest covers contents alone, the
-	// directory name is not in it, so a copy of an installed skill carries a
-	// valid stamp and a digest that checks out. A user who copies one aside
-	// before editing it, or keeps a second under another name, has not left an
-	// orphan behind, and a sweep that takes it away destroys work it was never
-	// asked about.
-	carried := make(map[string]bool, in.set.Len())
 	for _, sk := range in.set.Skills() {
-		carried[sk.Digest()] = true
 		info, err := os.Stat(filepath.Join(t.Dir, sk.Name))
 		if err != nil {
 			continue
@@ -452,18 +472,16 @@ func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallSt
 		if recorded == "" || fields[MetaKeyEmbeddedBy] != in.toolName {
 			continue // someone else's, or carrying no claim at all
 		}
-		// A copy of a skill the binary still carries, under a name of the
-		// user's choosing. Two things say so: the installed name resolves in
-		// the set, which is what a copy of a live skill reads and what a
-		// dropped one never does, or the recorded digest is one the binary
-		// still writes, which answers for a SKILL.md with no name field. A
-		// dropped skill matches neither.
-		if name := fields["name"]; name != "" {
-			if _, ok := in.set.Lookup(name); ok {
-				continue
-			}
-		}
-		if carried[recorded] {
+		// Which skill this directory holds, as whatever wrote it recorded.
+		// Install always writes a skill into a directory of its own name, so
+		// the two agree for anything this tool placed, and they disagree for a
+		// copy the user made under a name of their own. Nothing about the
+		// contents can stand in for this: the digest does not cover the
+		// directory name, so every copy of an installed skill carries a stamp
+		// that checks out, and one that stops checking out the moment the
+		// skill is next edited upstream.
+		held, known := installedSkillName(fields)
+		if !known || held != name {
 			continue
 		}
 
@@ -486,6 +504,24 @@ func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallSt
 		out = append(out, st)
 	}
 	return out, nil
+}
+
+// installedSkillName is the skill an installed directory holds.
+//
+// x-embedded-name records it outright. A manifest written before that key
+// existed has the skill's own name field instead, which install copies from
+// the embedded skill and is therefore the same string. A manifest with
+// neither cannot be placed: a directory whose name is all there is to go on
+// reads the same whether this tool put it there or somebody copied it, and
+// guessing wrong deletes their work.
+func installedSkillName(fields map[string]string) (string, bool) {
+	if name := fields[MetaKeyEmbeddedName]; name != "" {
+		return name, true
+	}
+	if name := fields["name"]; name != "" {
+		return name, true
+	}
+	return "", false
 }
 
 // isEmbeddedDir reports whether dest is one of the directories the embedded
@@ -724,6 +760,7 @@ func (in *Installer) stamp(sk Skill) func(string, []byte) ([]byte, error) {
 		}
 		return manifest.With(data, []manifest.Entry{
 			{Key: MetaKeyEmbeddedBy, Value: in.toolName},
+			{Key: MetaKeyEmbeddedName, Value: sk.Name},
 			{Key: MetaKeyEmbeddedVersion, Value: in.version},
 			{Key: MetaKeyEmbeddedAt, Value: in.now().UTC().Format(time.RFC3339)},
 			{Key: MetaKeyEmbeddedDigest, Value: sk.Digest()},
