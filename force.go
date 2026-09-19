@@ -29,11 +29,14 @@ type ForceRequiredError struct {
 
 func (e *ForceRequiredError) Error() string {
 	var b strings.Builder
-	b.WriteString("refusing to overwrite skills this tool did not install, or that were edited after installing:\n")
+	// "or remove", because a skill the binary no longer carries is removed
+	// rather than written over, and an edited one of those lands here too.
+	b.WriteString("refusing to overwrite or remove skills this tool did not install," +
+		" or that were edited after installing:\n")
 	for _, st := range e.Blocked {
 		fmt.Fprintf(&b, "  %s (%s)\n", st.Path, st.State)
 	}
-	b.WriteString("re-run with --force to overwrite")
+	b.WriteString("re-run with --force")
 	return b.String()
 }
 

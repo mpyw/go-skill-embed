@@ -256,6 +256,29 @@ copy and its embedded original hash the same.
 | `outdated` | Not what this binary would write | Overwrites it |
 | `modified` | The user edited it after installing | Skips it, and reports `ErrNeedsForce` |
 | `foreign` | Not something this tool wrote | Skips it, and reports `ErrNeedsForce` |
+| `orphaned` | This tool wrote it, and the binary no longer carries it | Removes it |
+
+> [!IMPORTANT]
+> A version that drops or renames a skill leaves the old directory behind, and
+> nothing would ever reach it again: every walk starts from the embedded set,
+> so `install` would pass it by, `list` would not mention it, and `uninstall`
+> would leave it there for good.
+>
+> `install` therefore removes it. The claim rests on the same evidence every
+> other state rests on, the installed `SKILL.md` naming this tool in
+> `x-embedded-by` with a digest that still matches its contents. A
+> hand-written directory, another tool's, and anything that is not a skill
+> directory at all are left where they are.
+>
+> | | |
+> | --- | --- |
+> | `install` | Removes it, and says so |
+> | `install <name>` | Leaves it. The run is about the named skills |
+> | `install --dry-run` | Reports the removal without making it |
+> | `uninstall` | Removes it, so a full uninstall leaves nothing behind |
+> | Edited since it was installed | Reads as `modified`, so it needs `--force` |
+>
+> This applies to both scopes, and to `--dir`.
 
 A skipped skill does not stop the others. `Install` writes everything it can,
 returns one `InstallResult` per skill either way, and returns an error wrapping

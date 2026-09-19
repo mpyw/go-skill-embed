@@ -98,6 +98,22 @@ this reader is not sent looking for one.
 between there and the rename is not caught. The case it is for is a link
 committed into a repository, which is there before the run starts.
 
+**Finding dropped skills from a manifest of what was installed.** It is what
+`gh skill install` and fslc both keep, and it is the thing this library does
+not have: state lives in each installed `SKILL.md`, which is why a half
+finished run is always recoverable and why a version mismatch can never orphan
+a payload. The sweep reads the same stamps instead, so nothing new has to be
+kept in step.
+
+**Sweeping on `install <name>`.** Only a run over the whole set knows what is
+missing from it. A named run is about those names, and removing a skill it was
+never asked about on the way past is not something the user could have
+predicted.
+
+**Removing an edited orphan without `--force`.** The binary has nothing to put
+back, so the removal is final in a way an overwrite is not. It reads as
+`modified` and goes through the same gate as every other edit.
+
 **Letting a `Digest` error out of `inspect`.** A symlink inside an installed
 skill, which is a thing a user does, made `Status` fail. `Install` and
 `Uninstall` both call `Status` first, so `--force` failed too and the only way

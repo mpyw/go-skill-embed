@@ -328,6 +328,11 @@ type InstallStatus struct {
 	// Path is the skill's own directory inside InstallTarget.Dir.
 	Path  string
 	State State
+	// Embedded reports whether the binary still carries this skill. A false
+	// means an earlier version installed it and this one does not have it, so
+	// there is nothing to write and removing it is all install can do. Skill
+	// then holds the installed name alone.
+	Embedded bool
 	// InstalledBy and InstalledVersion come from the installed frontmatter.
 	InstalledBy      string
 	InstalledVersion string
@@ -355,13 +360,83 @@ func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallSta
 			}
 			out = append(out, st)
 		}
+		// Only a run over the whole set knows what is missing from it. `install
+		// demo` is about demo, and sweeping the directory on the way past would
+		// remove skills the run was never asked about.
+		if len(o.Names) > 0 {
+			continue
+		}
+		orphans, err := in.orphaned(t)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, orphans...)
+	}
+	return out, nil
+}
+
+// orphaned lists the directories at t that this tool installed and the binary
+// no longer carries.
+//
+// Nothing else finds them. Every other walk starts from the embedded set, so a
+// skill dropped between two versions is never looked at again: install passes
+// it by, list does not mention it, and uninstall leaves it behind for good.
+//
+// A directory is claimed only on the evidence inspect already trusts, its
+// x-embedded-by naming this tool and a digest to check the contents against.
+// An edited copy is reported as modified, so removing it asks for --force like
+// every other edit.
+func (in *Installer) orphaned(t InstallTarget) ([]InstallStatus, error) {
+	entries, err := os.ReadDir(t.Dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var out []InstallStatus
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if _, ok := in.set.Lookup(name); ok {
+			continue
+		}
+		dest := filepath.Join(t.Dir, name)
+		installed, err := os.ReadFile(filepath.Join(dest, SkillFile))
+		if err != nil {
+			continue // not a skill directory, or not one that can be read
+		}
+		fields := manifest.Fields(installed)
+		recorded := fields[MetaKeyEmbeddedDigest]
+		if recorded == "" || fields[MetaKeyEmbeddedBy] != in.toolName {
+			continue // someone else's, or carrying no claim at all
+		}
+
+		st := InstallStatus{
+			Skill:            Skill{Name: name},
+			Target:           t,
+			Path:             dest,
+			State:            StateOrphaned,
+			InstalledBy:      fields[MetaKeyEmbeddedBy],
+			InstalledVersion: fields[MetaKeyEmbeddedVersion],
+		}
+		actual, err := skillfs.Digest(os.DirFS(dest))
+		if err != nil || actual != recorded {
+			// Unreadable or edited since. Either way it is not the copy this
+			// tool wrote, so it is not removed without being asked twice.
+			st.State = StateModified
+		}
+		out = append(out, st)
 	}
 	return out, nil
 }
 
 func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
 	dest := filepath.Join(t.Dir, sk.Name)
-	st := InstallStatus{Skill: sk, Target: t, Path: dest, State: StateMissing}
+	st := InstallStatus{Skill: sk, Target: t, Path: dest, State: StateMissing, Embedded: true}
 
 	info, err := os.Stat(dest)
 	if err != nil {
@@ -461,12 +536,22 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 		}
 		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
+		case st.State == StateOrphaned:
+			// This tool wrote it, the digest says it is untouched, and the
+			// binary has no copy to put back. Leaving it is the only outcome
+			// nobody wants, so it goes without --force, the way an outdated
+			// skill is replaced without one.
+			r.Action, r.Reason = ActionRemoved, "no longer embedded in "+in.toolName
 		case st.State == StateModified && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
 			blocked = append(blocked, st)
 		case st.State == StateForeign && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "installed by something else; use --force"
 			blocked = append(blocked, st)
+		case !st.Embedded:
+			// An orphan the digest could not clear, reached with --force.
+			// There is nothing to write, so removing it is the whole action.
+			r.Action, r.Reason = ActionRemoved, "no longer embedded in "+in.toolName
 		case st.State == StateUpToDate && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "already up to date"
 		case st.State == StateMissing:
@@ -474,9 +559,16 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 		default:
 			r.Action = ActionUpdated
 		}
-		if r.Action != ActionSkipped && !o.DryRun {
-			if err := in.write(ctx, st.Skill, st.Path); err != nil {
-				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
+		if !o.DryRun {
+			switch r.Action {
+			case ActionRemoved:
+				if err := os.RemoveAll(st.Path); err != nil {
+					return results, fmt.Errorf("remove %s from %s: %w", st.Skill.Name, st.Target.Dir, err)
+				}
+			case ActionInstalled, ActionUpdated:
+				if err := in.write(ctx, st.Skill, st.Path); err != nil {
+					return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
+				}
 			}
 		}
 		results = append(results, r)

@@ -17,4 +17,9 @@ const (
 	StateModified State = "modified"
 	// StateForeign means something else owns a skill of that name there.
 	StateForeign State = "foreign"
+	// StateOrphaned means this tool installed it and the binary no longer
+	// carries it. An earlier version embedded a skill that has since been
+	// renamed or dropped, and nothing else would ever reach the directory
+	// again.
+	StateOrphaned State = "orphaned"
 )

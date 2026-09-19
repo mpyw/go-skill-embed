@@ -1480,3 +1480,263 @@ func TestProjectDirCannotClimbOutOfTheProject(t *testing.T) {
 		t.Errorf("the message blames a symbolic link that is not there: %v", err)
 	}
 }
+
+// reducedInstaller returns an installer carrying only the named skills, the
+// way a later version of a tool that dropped one does. The files are copied
+// rather than re-authored, so a skill it keeps still hashes to what is already
+// on the disk.
+func reducedInstaller(t *testing.T, root string, keep ...string) *skillembed.Installer {
+	t.Helper()
+	kept := map[string]bool{}
+	for _, name := range keep {
+		kept[name] = true
+	}
+	files := fstest.MapFS{}
+	err := fs.WalkDir(installTestSkills, "testdata/skills", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rest, ok := strings.CutPrefix(p, "testdata/skills/")
+		if !ok {
+			return nil
+		}
+		dir, _, _ := strings.Cut(rest, "/")
+		if !kept[dir] {
+			return nil
+		}
+		data, err := installTestSkills.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		files[p] = &fstest.MapFile{Data: data}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return skillembed.NewInstaller(
+		skillembed.MustSkillsFromFS(files, "testdata/skills"),
+		skillembed.WithToolName("testtool"),
+		skillembed.WithVersion("v2.0.0"),
+		skillembed.WithProjectRoot(root),
+		skillembed.WithOutput(&bytes.Buffer{}),
+	)
+}
+
+// Every walk starts from the embedded set, so a skill dropped between two
+// versions used to be unreachable: install passed it by, list did not mention
+// it, and uninstall left it behind for good.
+func TestUpgradeRemovesASkillTheBinaryNoLongerCarries(t *testing.T) {
+	ctx := t.Context()
+	for _, scope := range []skillembed.Scope{skillembed.ScopeProject, skillembed.ScopeUser} {
+		t.Run(string(scope), func(t *testing.T) {
+			old, root := newInstaller(t)
+			if scope == skillembed.ScopeUser {
+				t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "home"))
+			}
+			opts := skillembed.InstallOptions{
+				Scope:  scope,
+				Agents: []skillembed.AgentSelector{"claude-code"},
+			}
+			if _, err := old.Install(ctx, opts); err != nil {
+				t.Fatal(err)
+			}
+			dir := installedDir(t, old, opts)
+			if _, err := os.Stat(filepath.Join(dir, "bare-skill")); err != nil {
+				t.Fatalf("the first install did not land: %v", err)
+			}
+
+			next := reducedInstaller(t, root, "demo-skill")
+
+			t.Run("list reports it", func(t *testing.T) {
+				statuses, err := next.Status(ctx, opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var found bool
+				for _, st := range statuses {
+					if st.Skill.Name != "bare-skill" {
+						continue
+					}
+					found = true
+					if st.State != skillembed.StateOrphaned {
+						t.Errorf("state = %s, want %s", st.State, skillembed.StateOrphaned)
+					}
+					if st.Embedded {
+						t.Error("Embedded is true for a skill the binary dropped")
+					}
+				}
+				if !found {
+					t.Error("the dropped skill is not reported at all")
+				}
+			})
+
+			t.Run("a named run does not sweep", func(t *testing.T) {
+				named := opts
+				named.Names = []string{"demo-skill"}
+				if _, err := next.Install(ctx, named); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "bare-skill")); err != nil {
+					t.Errorf("`install demo-skill` removed a skill it was not asked about: %v", err)
+				}
+			})
+
+			t.Run("a dry run does not sweep", func(t *testing.T) {
+				dry := opts
+				dry.DryRun = true
+				results, err := next.Install(ctx, dry)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := actionFor(results, "bare-skill"); got != skillembed.ActionRemoved {
+					t.Errorf("dry run action = %s, want %s", got, skillembed.ActionRemoved)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "bare-skill")); err != nil {
+					t.Errorf("the dry run removed it: %v", err)
+				}
+			})
+
+			t.Run("a full install sweeps", func(t *testing.T) {
+				results, err := next.Install(ctx, opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := actionFor(results, "bare-skill"); got != skillembed.ActionRemoved {
+					t.Errorf("action = %s, want %s", got, skillembed.ActionRemoved)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "bare-skill")); !errors.Is(err, fs.ErrNotExist) {
+					t.Errorf("the dropped skill survived: %v", err)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "demo-skill")); err != nil {
+					t.Errorf("the skill still carried was removed too: %v", err)
+				}
+			})
+		})
+	}
+}
+
+// installedDir is the one directory a single agent run writes to.
+func installedDir(t *testing.T, in *skillembed.Installer, o skillembed.InstallOptions) string {
+	t.Helper()
+	targets, err := in.Targets(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets = %d, want 1", len(targets))
+	}
+	return targets[0].Dir
+}
+
+func actionFor(results []skillembed.InstallResult, name string) skillembed.Action {
+	for _, r := range results {
+		if r.Skill.Name == name {
+			return r.Action
+		}
+	}
+	return ""
+}
+
+// The sweep claims a directory on the evidence inspect already trusts, and on
+// nothing weaker. Everything else in the skills directory has to survive it.
+func TestTheSweepClaimsOnlyThisToolsOwnWork(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name, skillembed.SkillFile), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("handwritten", "---\nname: handwritten\n---\nmine\n")
+	write("another-tool", "---\nname: another-tool\nx-embedded-by: sometool\nx-embedded-digest: sha256:00\n---\n")
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+	if _, err := next.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"handwritten", "another-tool", "notes.md"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("the sweep took %s, which is not this tool's: %v", name, err)
+		}
+	}
+}
+
+// An orphan edited after it was installed is still the user's work, so it is
+// left alone until asked twice, like every other edit. There is nothing to
+// write in its place, so --force removes it rather than overwriting it.
+func TestAnEditedOrphanNeedsForce(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	edited := filepath.Join(dir, "bare-skill", skillembed.SkillFile)
+	body, err := os.ReadFile(edited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(edited, append(body, []byte("\nmy own note\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+
+	results, err := next.Install(ctx, opts)
+	if !errors.Is(err, skillembed.ErrNeedsForce) {
+		t.Fatalf("Install = %v, want ErrNeedsForce", err)
+	}
+	if got := actionFor(results, "bare-skill"); got != skillembed.ActionSkipped {
+		t.Errorf("action = %s, want %s", got, skillembed.ActionSkipped)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bare-skill")); err != nil {
+		t.Errorf("an edited orphan was removed without --force: %v", err)
+	}
+
+	forced := opts
+	forced.Force = true
+	if _, err := next.Install(ctx, forced); err != nil {
+		t.Fatalf("forced install = %v, want nil", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bare-skill")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("--force did not remove it: %v", err)
+	}
+}
+
+// uninstall means everything this tool put there, including what it no longer
+// carries. Otherwise a dropped skill can never be reached again.
+func TestUninstallTakesOrphansWithIt(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+
+	next := reducedInstaller(t, root, "demo-skill")
+	if _, err := next.Uninstall(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"demo-skill", "bare-skill"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("uninstall left %s behind: %v", name, err)
+		}
+	}
+}
