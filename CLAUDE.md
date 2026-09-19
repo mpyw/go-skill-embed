@@ -105,6 +105,17 @@ finished run is always recoverable and why a version mismatch can never orphan
 a payload. The sweep reads the same stamps instead, so nothing new has to be
 kept in step.
 
+**Matching an orphan to an installed skill by folded name.** `strings.ToLower`
+is not the file system's equivalence relation, which is already recorded
+below. `os.SameFile` asks the file system instead, and a skill renamed to
+another spelling of itself is one directory whichever way it is spelled. Left
+alone, the sweep deleted what the same run had just written and exited 0.
+
+**Sweeping the `.tmp-` and `.old-` directories skillfs.Write leaves.** The
+rescue copy is a whole installation, stamp and all, so it reads as an orphan.
+It is also the only copy left, and the error that abandoned it names it for
+the user to recover. Every dot-prefixed entry is passed over.
+
 **Sweeping on `install <name>`.** Only a run over the whole set knows what is
 missing from it. A named run is about those names, and removing a skill it was
 never asked about on the way past is not something the user could have

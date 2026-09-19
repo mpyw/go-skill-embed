@@ -277,6 +277,8 @@ copy and its embedded original hash the same.
 > | `install --dry-run` | Reports the removal without making it |
 > | `uninstall` | Removes it, so a full uninstall leaves nothing behind |
 > | Edited since it was installed | Reads as `modified`, so it needs `--force` |
+> | Unreadable, such as one holding a symlink | Reads as `foreign`, so it needs `--force` |
+> | A `.`-prefixed directory beside the skills | Left alone, including a rescue copy |
 >
 > This applies to both scopes, and to `--dir`.
 

@@ -1740,3 +1740,113 @@ func TestUninstallTakesOrphansWithIt(t *testing.T) {
 		}
 	}
 }
+
+// foldsCase reports whether the file system under dir answers to more than one
+// spelling of a name.
+func foldsCase(t *testing.T, dir string) bool {
+	t.Helper()
+	probe := filepath.Join(dir, "CaseProbe")
+	if err := os.MkdirAll(probe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(probe) }()
+	_, err := os.Stat(filepath.Join(dir, "caseprobe"))
+	return err == nil
+}
+
+// A file system that folds case answers to more than one spelling, so a skill
+// renamed to another spelling of itself reads as an embedded skill and as an
+// orphan at once, and both rows are the same directory. Removing the orphan
+// after writing the skill deleted what the run had just installed, and said
+// "updated" and "removed" on its way to exit 0.
+func TestASpellingOfAnInstalledSkillIsNotSweptAway(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t)
+	if !foldsCase(t, root) {
+		t.Skip("this file system does not fold case, so the two names are two directories")
+	}
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, in, opts)
+	if err := os.Rename(filepath.Join(dir, "bare-skill"), filepath.Join(dir, "Bare-Skill")); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := in.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.Action == skillembed.ActionRemoved {
+			t.Errorf("removed %s at %s, which is the skill this run installed", r.Skill.Name, r.Path)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bare-skill", skillembed.SkillFile)); err != nil {
+		t.Errorf("the installed skill is gone: %v", err)
+	}
+}
+
+// When skillfs.Write cannot put the new tree in place it leaves the old one
+// beside the destination and names it in the error, for the user to go and
+// recover. It is a verbatim copy of an installation, stamp and all, so the
+// sweep would otherwise claim it and take away the only copy.
+func TestTheSweepLeavesARescuedInstallationAlone(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	rescued := filepath.Join(dir, ".bare-skill.old-1234")
+	if err := os.Rename(filepath.Join(dir, "bare-skill"), rescued); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+	results, err := next.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.Path == rescued {
+			t.Errorf("the sweep reported the rescue copy: %s", r.Action)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(rescued, skillembed.SkillFile)); err != nil {
+		t.Errorf("the rescue copy the error told the user to recover is gone: %v", err)
+	}
+}
+
+// inspect will not claim a copy it cannot hash, and the sweep asks the same
+// question, so it has to reach the same answer. "Edited after installing"
+// would be a claim about contents nothing managed to read.
+func TestAnOrphanThatCannotBeHashedIsForeign(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	link := filepath.Join(dir, "bare-skill", "link.txt")
+	if err := os.Symlink(filepath.Join(root, "elsewhere"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+	statuses, err := next.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range statuses {
+		if st.Skill.Name != "bare-skill" {
+			continue
+		}
+		if st.State != skillembed.StateForeign {
+			t.Errorf("state = %s, want %s", st.State, skillembed.StateForeign)
+		}
+	}
+}
