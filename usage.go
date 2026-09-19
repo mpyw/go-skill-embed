@@ -40,7 +40,11 @@ func (in *Installer) usageHeadings(sub string) (summary, lines string) {
 	tool, cmd := in.ToolName(), in.CommandName()
 	switch sub {
 	case "install":
-		return "Install the agent skills embedded in " + tool + ".",
+		// Naming the removal here because --help is the only surface many
+		// people read, and a subcommand called install deleting a directory
+		// is not something to leave to the README.
+		return "Install the agent skills embedded in " + tool +
+				", and remove the ones it no longer carries.",
 			fmt.Sprintf("  %s %s install [flags] [skill...]\n", tool, cmd)
 	case "uninstall":
 		return "Remove the agent skills embedded in " + tool + ".",

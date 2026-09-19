@@ -303,7 +303,12 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 }
 
 // selected resolves o.Names against the embedded set.
-func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
+//
+// alsoInstalled holds the names found at the destinations that the set does
+// not carry. A name in there is an orphan, which has a row of its own and no
+// embedded skill behind it, so it is accepted and skipped rather than called
+// unknown. Listing a name and then refusing it is the worse answer.
+func (in *Installer) selected(o InstallOptions, alsoInstalled map[string]bool) ([]Skill, error) {
 	if len(o.Names) == 0 {
 		return in.set.Skills(), nil
 	}
@@ -311,6 +316,9 @@ func (in *Installer) selected(o InstallOptions) ([]Skill, error) {
 	for _, name := range o.Names {
 		sk, ok := in.set.Lookup(name)
 		if !ok {
+			if alsoInstalled[name] {
+				continue
+			}
 			available := in.set.Names()
 			sort.Strings(available)
 			return nil, fmt.Errorf("%w %q (embedded: %s)", ErrUnknownSkill, name, strings.Join(available, ", "))
@@ -334,17 +342,42 @@ type InstallStatus struct {
 }
 
 // Status reports what is installed where, without changing anything.
+//
+// It also reports what a destination holds that this tool wrote and the binary
+// no longer carries, as StateOrphaned.
 func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallStatus, error) {
 	targets, err := in.Targets(o)
 	if err != nil {
 		return nil, err
 	}
-	skills, err := in.selected(o)
+
+	// Found before the names are resolved. List prints these, so a name it
+	// printed has to be one uninstall accepts, and the embedded set alone
+	// cannot say whether a name exists at the destination.
+	orphansAt := make([][]InstallStatus, len(targets))
+	alsoInstalled := map[string]bool{}
+	for i, t := range targets {
+		orphans, err := in.orphaned(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		orphansAt[i] = orphans
+		for _, st := range orphans {
+			alsoInstalled[st.Skill.Name] = true
+		}
+	}
+
+	skills, err := in.selected(o, alsoInstalled)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]InstallStatus, 0, len(targets)*len(skills))
-	for _, t := range targets {
+	wanted := make(map[string]bool, len(o.Names))
+	for _, name := range o.Names {
+		wanted[name] = true
+	}
+
+	out := make([]InstallStatus, 0, len(targets)*(len(skills)+1))
+	for i, t := range targets {
 		for _, sk := range skills {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -355,8 +388,131 @@ func (in *Installer) Status(ctx context.Context, o InstallOptions) ([]InstallSta
 			}
 			out = append(out, st)
 		}
+		for _, st := range orphansAt[i] {
+			// A named run acts on what it was told to. `install demo` is about
+			// demo, and sweeping the directory on the way past would remove
+			// skills the run was never asked about.
+			if len(o.Names) > 0 && !wanted[st.Skill.Name] {
+				continue
+			}
+			out = append(out, st)
+		}
 	}
 	return out, nil
+}
+
+// orphaned lists the directories at t that this tool wrote and the binary no
+// longer carries.
+//
+// Nothing else finds them. Every other walk starts from the embedded set, so a
+// skill dropped between two versions is never looked at again: install passes
+// it by, list does not mention it, and uninstall leaves it behind for good.
+//
+// A directory is claimed on three things together, and each is necessary. Its
+// x-embedded-by names this tool, so nothing anyone else put there is in reach.
+// Its contents still hash to the digest that was recorded when it was written,
+// so it is byte for byte what this tool left and removing it loses nothing the
+// binary could not write again. And the binary has no skill of that name to
+// put back.
+//
+// A directory that fails the digest is not claimed and is not reported. It
+// held this tool's work once and holds something else now, which is what a
+// skill copied and then edited into one of the user's own looks like. There is
+// no version of that this tool should delete: nothing is being installed over
+// it, so there is no conflict for --force to resolve, and --force therefore
+// has no part in the sweep at all.
+func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallStatus, error) {
+	entries, err := os.ReadDir(t.Dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Where the embedded skills live at this target. A name that is not in the
+	// set can still be one of these directories: a file system that folds case
+	// or normalizes Unicode answers to more than one spelling, so a skill
+	// renamed to another spelling of itself reads as both an embedded row and
+	// an orphan, and both name the same directory. Removing the orphan would
+	// then delete the skill the same run just wrote. os.SameFile settles it
+	// without this having to guess what the file system treats as equal.
+	embedded := make([]os.FileInfo, 0, in.set.Len())
+	for _, sk := range in.set.Skills() {
+		info, err := os.Stat(filepath.Join(t.Dir, sk.Name))
+		if err != nil {
+			continue
+		}
+		embedded = append(embedded, info)
+	}
+
+	var out []InstallStatus
+	for _, e := range entries {
+		// The one place the sweep does real I/O, a directory at a time.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if _, ok := in.set.Lookup(name); ok {
+			continue
+		}
+		// skillfs.Write stages and rescues under a leading dot, and the rescue
+		// is a verbatim copy of an installation, stamp and all, so it matches
+		// everything below. The error that leaves one behind names it for the
+		// user to go and recover, and the next run must not take it away.
+		// Agents pass over these too.
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		dest := filepath.Join(t.Dir, name)
+		if in.isEmbeddedDir(dest, embedded) {
+			continue
+		}
+		installed, err := os.ReadFile(filepath.Join(dest, SkillFile))
+		if err != nil {
+			continue // not a skill directory, or not one that can be read
+		}
+		fields := manifest.Fields(installed)
+		recorded := fields[MetaKeyEmbeddedDigest]
+		if recorded == "" || fields[MetaKeyEmbeddedBy] != in.toolName {
+			continue // someone else's, or carrying no claim at all
+		}
+		actual, err := skillfs.Digest(os.DirFS(dest))
+		if err != nil || actual != recorded {
+			continue // not what this tool left there, so not this tool's to take
+		}
+
+		out = append(out, InstallStatus{
+			Skill:            Skill{Name: name},
+			Target:           t,
+			Path:             dest,
+			State:            StateOrphaned,
+			InstalledBy:      fields[MetaKeyEmbeddedBy],
+			InstalledVersion: fields[MetaKeyEmbeddedVersion],
+		})
+	}
+	return out, nil
+}
+
+// isEmbeddedDir reports whether dest is one of the directories the embedded
+// skills occupy, reached under another spelling of its name.
+func (*Installer) isEmbeddedDir(dest string, embedded []os.FileInfo) bool {
+	if len(embedded) == 0 {
+		return false
+	}
+	info, err := os.Stat(dest)
+	if err != nil {
+		return false
+	}
+	for _, other := range embedded {
+		if os.SameFile(info, other) {
+			return true
+		}
+	}
+	return false
 }
 
 func (in *Installer) inspect(t InstallTarget, sk Skill) (InstallStatus, error) {
@@ -439,6 +595,11 @@ type InstallResult struct {
 
 // Install writes the selected skills into the resolved targets.
 //
+// A run over the whole set also removes what this tool wrote and the binary no
+// longer carries, reported as StateOrphaned. Nothing else would ever reach
+// those directories again. A run naming skills installs those and sweeps
+// nothing it was not told to.
+//
 // A destination this tool did not write, or one edited after it did, is left
 // alone unless InstallOptions.Force is set. Those skills come back as
 // ActionSkipped with a Reason, exactly as Uninstall reports them, and the
@@ -461,6 +622,12 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 		}
 		r := InstallResult{Skill: st.Skill, Target: st.Target, Path: st.Path, Before: st.State}
 		switch {
+		case st.State == StateOrphaned:
+			// The binary has no copy to put back, so removing it is the whole
+			// action. No --force: the directory is byte for byte what this
+			// tool wrote, nothing is being installed over it, and leaving it
+			// is the one outcome nobody wants.
+			r.Action, r.Reason = ActionRemoved, "no longer embedded in "+in.toolName
 		case st.State == StateModified && !o.Force:
 			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
 			blocked = append(blocked, st)
@@ -474,9 +641,18 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 		default:
 			r.Action = ActionUpdated
 		}
-		if r.Action != ActionSkipped && !o.DryRun {
-			if err := in.write(ctx, st.Skill, st.Path); err != nil {
-				return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
+		if !o.DryRun {
+			// Switched on the action rather than on "not skipped", because an
+			// orphan has no embedded skill behind it and nothing to write.
+			switch r.Action {
+			case ActionRemoved:
+				if err := os.RemoveAll(st.Path); err != nil {
+					return results, fmt.Errorf("remove %s from %s: %w", st.Skill.Name, st.Target.Dir, err)
+				}
+			case ActionInstalled, ActionUpdated:
+				if err := in.write(ctx, st.Skill, st.Path); err != nil {
+					return results, fmt.Errorf("install %s into %s: %w", st.Skill.Name, st.Target.Dir, err)
+				}
 			}
 		}
 		results = append(results, r)
@@ -489,6 +665,10 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 
 // Uninstall removes the selected skills from the resolved targets. Skills this
 // tool did not install are left alone unless InstallOptions.Force is set.
+//
+// A run over the whole set also removes what this tool wrote and the binary no
+// longer carries, so that a full uninstall leaves nothing of this tool's
+// behind.
 //
 // The results are meaningful even when the error is not nil.
 func (in *Installer) Uninstall(ctx context.Context, o InstallOptions) ([]InstallResult, error) {

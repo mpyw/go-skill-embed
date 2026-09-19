@@ -98,6 +98,51 @@ this reader is not sent looking for one.
 between there and the rename is not caught. The case it is for is a link
 committed into a repository, which is there before the run starts.
 
+### Sweeping
+
+**Giving `--force` a part in it.** It was the shape of three rounds of
+findings before the premise itself was questioned. `--force` means "something
+is in the way of what I am installing; overwrite it". Nothing is being
+installed over an orphan, so there is no conflict, and a flag that let the
+sweep take a directory whose contents had changed was authorising a deletion
+nothing required. Worse, the tool asks for `--force` whenever anything reads
+as modified, so following its own advice destroyed a user's edited fork of a
+shipped skill. Contents that no longer match are the evidence the directory is
+not this tool's any more; the sweep just stops there, and the flag keeps one
+meaning.
+
+**Finding them from a manifest of what was installed.** It is what
+`gh skill install` and fslc both keep, and it is the thing this library does
+not have: state lives in each installed `SKILL.md`, which is why a half
+finished run is always recoverable and why a version mismatch can never orphan
+a payload. The sweep reads the same stamps instead, so nothing new has to be
+kept in step.
+
+**Sweeping on `install <name>`.** Only a run over the whole set knows what is
+missing from it. A named run is about those names, and removing a skill it was
+never asked about on the way past is not something the user could have
+predicted. Naming an orphan does reach it, because `list` prints one and
+refusing a name the tool just printed is the worse answer.
+
+**Matching an orphan to an installed skill by folded name.** `strings.ToLower`
+is not the file system's equivalence relation, which is recorded below.
+`os.SameFile` asks the file system instead, and a skill renamed to another
+spelling of itself is one directory whichever way it is spelled. Left alone,
+the sweep deleted what the same run had just written and exited 0.
+
+**Sweeping the `.tmp-` and `.old-` directories `skillfs.Write` leaves.** The
+rescue copy is a whole installation, stamp and digest and all, so it reads as
+an orphan exactly. It is also the only copy left, and the error that abandoned
+it names it for the user to recover. Every dot-prefixed entry is passed over.
+
+**Testing the `x-embedded-by` check with a hand-made fixture.** A directory
+carrying another name in `x-embedded-by` and a digest that does not match its
+own contents is turned away by the digest, whether or not the name is ever
+read, so the test passed with the check deleted. The fixture is a real
+installation made by a second `Installer` with another `WithToolName`, where
+the stamp is well formed and the digest checks out, and the name is the only
+thing left between it and the sweep.
+
 **Letting a `Digest` error out of `inspect`.** A symlink inside an installed
 skill, which is a thing a user does, made `Status` fail. `Install` and
 `Uninstall` both call `Status` first, so `--force` failed too and the only way
