@@ -2,11 +2,13 @@ package skillembed_test
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -1254,6 +1256,117 @@ func TestOutputNamesTheProjectRoot(t *testing.T) {
 		}
 		if strings.Contains(skillembed.RenderCLIStatus(statuses), "Project root:") {
 			t.Errorf("%+v: the listing names a root it does not have", o)
+		}
+	}
+}
+
+// installCancelOnce is live until a path appears, and cancelled after that.
+//
+// A real cancellation lands wherever it lands, and the checks inside Install
+// and Uninstall are only reached once Status has passed. Counting calls would
+// work too, and would encode how many files each skill holds.
+type installCancelOnce struct {
+	context.Context
+	written string
+}
+
+func (c installCancelOnce) Err() error {
+	if _, err := os.Stat(c.written); err == nil {
+		return context.Canceled
+	}
+	return nil
+}
+
+// A cancelled context stops the work between skills, and the results describe
+// what happened before it. Without the checks, a cancelled run installs
+// everything and reports success.
+func TestCancellationStopsBetweenSkills(t *testing.T) {
+	in, root := newInstaller(t)
+	dest := filepath.Join(root, "skills")
+	opts := skillembed.InstallOptions{Dir: dest}
+
+	t.Run("already cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		statuses, err := in.Status(ctx, opts)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Status = %v, want context.Canceled", err)
+		}
+		if len(statuses) != 0 {
+			t.Errorf("Status returned %d rows for a run that did nothing", len(statuses))
+		}
+		if _, err := in.Install(ctx, opts); !errors.Is(err, context.Canceled) {
+			t.Errorf("Install = %v, want context.Canceled", err)
+		}
+		if _, err := os.Stat(dest); err == nil {
+			t.Error("a cancelled install wrote something")
+		}
+	})
+
+	// The skills are installed in name order, and the first one appears at its
+	// destination only when its write has finished. Cancelling on that puts
+	// the cancellation in Install's own loop, before the second skill.
+	t.Run("cancelled inside the run", func(t *testing.T) {
+		ctx := installCancelOnce{
+			Context: t.Context(),
+			written: filepath.Join(dest, "bare-skill"),
+		}
+
+		results, err := in.Install(ctx, opts)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Install = %v, want context.Canceled", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want the one skill that was written", len(results))
+		}
+		if results[0].Action != skillembed.ActionInstalled {
+			t.Errorf("result = %s, want %s", results[0].Action, skillembed.ActionInstalled)
+		}
+		if _, err := os.Stat(filepath.Join(dest, results[0].Skill.Name, "SKILL.md")); err != nil {
+			t.Errorf("the reported skill is not on disk: %v", err)
+		}
+	})
+}
+
+// --agent is repeatable and one value may be a comma separated list. The help
+// says "(repeatable)" and the README says both, and neither form was tested.
+func TestAgentSelectorsSplitAndRepeat(t *testing.T) {
+	ctx := t.Context()
+	out := &bytes.Buffer{}
+	in, root := newInstaller(t, skillembed.WithOutput(out))
+	dest := filepath.Join(root, "skills")
+
+	want := []string{"claude-code", "cursor"}
+	for _, args := range [][]string{
+		{"install", "--dry-run", "--dir", dest, "--agent", "claude-code,cursor"},
+		{"install", "--dry-run", "--dir", dest, "--agent", "claude-code", "--agent", "cursor"},
+		{"install", "--dry-run", "--dir", dest, "--agent", " claude-code , cursor "},
+	} {
+		out.Reset()
+		if err := in.Run(ctx, args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+
+	// The same two agents, whichever way they were written.
+	for _, o := range []skillembed.InstallOptions{
+		{Agents: []skillembed.AgentSelector{"claude-code,cursor"}},
+		{Agents: []skillembed.AgentSelector{"claude-code", "cursor"}},
+	} {
+		targets, err := in.Targets(o)
+		if err != nil {
+			t.Fatalf("%+v: %v", o, err)
+		}
+		var named []string
+		for _, tg := range targets {
+			for _, a := range tg.Agents {
+				named = append(named, a.Name)
+			}
+		}
+		sort.Strings(named)
+		if strings.Join(named, ",") != strings.Join(want, ",") {
+			t.Errorf("%+v resolved %v, want %v", o, named, want)
 		}
 	}
 }

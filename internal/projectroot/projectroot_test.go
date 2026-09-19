@@ -96,3 +96,24 @@ func resolve(t *testing.T, dir string) string {
 	}
 	return out
 }
+
+// The bound is why the walk stops at the repository root. A marker above the
+// root belongs to something else, most often the home directory, and an
+// unbounded walk would resolve a project install there.
+func TestFindStopsAtTheRepositoryRoot(t *testing.T) {
+	outer := t.TempDir()
+	mkdir(t, filepath.Join(outer, ".claude"))
+
+	repo := filepath.Join(outer, "repo")
+	mkdir(t, filepath.Join(repo, ".git"))
+	sub := filepath.Join(repo, "sub")
+	mkdir(t, sub)
+
+	got, err := Find(sub, []string{".agents", ".claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolve(t, got) != resolve(t, repo) {
+		t.Errorf("root = %s, want %s; the walk passed the repository root", got, repo)
+	}
+}
