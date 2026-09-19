@@ -1,0 +1,84 @@
+name: Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag (e.g., v1.2.3)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to tag (e.g., v1.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid version format '$VERSION'"
+            echo "Expected format: vX.Y.Z (e.g., v1.2.3)"
+            exit 1
+          fi
+          echo "Version format valid: $VERSION"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Every module gets the same version, so a consumer never has to work out
+      # which adapter goes with which core. The list comes from the repository
+      # rather than from this file, so a fourth adapter needs no change here.
+      - name: Collect the tags
+        id: tags
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          tags="$VERSION"
+          while read -r dir; do
+            tags="$tags $dir/$VERSION"
+          done < <(./scripts/modules.sh)
+          echo "Tagging: $tags"
+          echo "list=$tags" >> "$GITHUB_OUTPUT"
+
+      # Checked before anything is pushed. A run that tagged the core and then
+      # stopped would leave the adapters unresolvable at that version.
+      - name: Check the tags do not exist
+        env:
+          TAGS: ${{ steps.tags.outputs.list }}
+        run: |
+          taken=""
+          for tag in $TAGS; do
+            if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
+              taken="$taken $tag"
+            fi
+          done
+          if [[ -n "$taken" ]]; then
+            echo "Error: these tags already exist:$taken"
+            exit 1
+          fi
+          echo "None of the tags exist yet"
+
+      - name: Create and push the tags
+        env:
+          TAGS: ${{ steps.tags.outputs.list }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for tag in $TAGS; do
+            git tag "$tag"
+          done
+          # One push, so the set lands together or not at all.
+          git push --atomic origin $TAGS
+          echo "Tagged:$TAGS"
