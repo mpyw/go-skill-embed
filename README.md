@@ -421,7 +421,7 @@ tell a mistyped flag from a disk that is full.
 | `ErrNoAgentSelected` | The values resolved to nothing |
 | `ErrNeedsForce` | A destination was left alone. `ForceRequiredError` names them |
 | `ErrProjectIsHome` | Project scope resolved to the home directory |
-| `ErrProjectEscapes` | A symbolic link takes a project scope destination outside the project |
+| `ErrProjectEscapes` | A project scope destination is outside the project root |
 
 ## The skill for this library
 

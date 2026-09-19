@@ -188,6 +188,43 @@ func TestWithin(t *testing.T) {
 			t.Errorf("Within = %v, want ErrOutsideRoot", err)
 		}
 	})
+
+	t.Run("a relative root", func(t *testing.T) {
+		// WithProjectRoot takes what it is given, and Targets resolves the
+		// destination with filepath.Abs before the check. Comparing one
+		// against the other refuses every project install.
+		t.Chdir(filepath.Dir(root))
+
+		if err := Within(filepath.Base(root), filepath.Join(root, ".claude", "skills")); err != nil {
+			t.Errorf("Within = %v, want nil", err)
+		}
+	})
+
+	t.Run("the volume root", func(t *testing.T) {
+		// A root already ending in a separator, so the prefix to test for
+		// would be "//" and would match nothing. Find returns the working
+		// directory when there is no repository and no marker, and that can
+		// be the volume root.
+		volume := filepath.VolumeName(root) + string(filepath.Separator)
+
+		if err := Within(volume, filepath.Join(volume, ".claude", "skills")); err != nil {
+			t.Errorf("Within = %v, want nil", err)
+		}
+	})
+
+	t.Run("a deep path with no link in it", func(t *testing.T) {
+		// The hop budget is for links. Spending it on the walk up to the first
+		// existing ancestor turns a deep destination into "too many symbolic
+		// links".
+		deep := root
+		for range maxLinkHops * 2 {
+			deep = filepath.Join(deep, "d")
+		}
+
+		if err := Within(root, deep); err != nil {
+			t.Errorf("Within = %v, want nil", err)
+		}
+	})
 }
 
 func symlink(t *testing.T, target, link string) {

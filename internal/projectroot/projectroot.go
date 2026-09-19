@@ -101,12 +101,16 @@ func sameDir(a, b string) bool {
 
 // ErrOutsideRoot reports that a destination leaves the root it was resolved
 // against.
-var ErrOutsideRoot = errors.New("a symbolic link takes the destination outside the project")
+//
+// A symbolic link is what usually does it, but the text does not say so: an
+// Agent whose ProjectDir climbs out of the project with .. reaches this too,
+// and blaming a link that is not there sends the reader looking for one.
+var ErrOutsideRoot = errors.New("the destination is outside the project root")
 
 // Within checks that dir stays inside root once symbolic links are resolved.
 //
 // A path component is followed by every write, so a link at dir or above it
-// decides where the bytes land, whatever the path says. Comparing the two
+// decides where the bytes land, whatever the path reads as. Comparing the two
 // literal strings cannot see that, and neither can a check on dir alone: the
 // link is usually a parent, and usually one the caller never names.
 //
@@ -122,26 +126,40 @@ func Within(root, dir string) error {
 	if err != nil {
 		return err
 	}
-	if realDir == realRoot || strings.HasPrefix(realDir, realRoot+string(filepath.Separator)) {
-		return nil
+	// filepath.Rel rather than a string prefix. A prefix has to be given a
+	// separator to keep /a/project-notes out of /a/project, and that separator
+	// is already there when the root is a volume root, where the test then
+	// becomes "//" and matches nothing.
+	rel, err := filepath.Rel(realRoot, realDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		// An error here is two different volumes on Windows, which is as
+		// outside as a path gets.
+		return fmt.Errorf("%w (%s is really %s)", ErrOutsideRoot, dir, realDir)
 	}
-	return fmt.Errorf("%w (%s is really %s)", ErrOutsideRoot, dir, realDir)
+	return nil
 }
 
-// maxLinkHops bounds the hand resolution below, the way a kernel bounds its
-// own. A cycle reaches EvalSymlinks as ELOOP rather than ErrNotExist and is
-// returned as the error it is, so this is a backstop and not the guard.
+// maxLinkHops bounds the links realPath follows by hand, the way a kernel
+// bounds its own. A cycle reaches EvalSymlinks as ELOOP rather than
+// ErrNotExist and is returned as the error it is, so this is a backstop and
+// not the guard.
 const maxLinkHops = 64
 
-// realPath resolves the symbolic links in p.
+// realPath resolves the symbolic links in p, which it first makes absolute so
+// that two results can be compared.
 //
 // filepath.EvalSymlinks needs the whole path to exist, and a skills directory
 // usually does not yet. The existing part is resolved and the rest appended,
 // which is where the directories about to be created will end up.
 func realPath(p string) (string, error) {
-	at := filepath.Clean(p)
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	at := abs
 	var rest []string
-	for hop := 0; hop < maxLinkHops; hop++ {
+	hops := 0
+	for {
 		resolved, err := filepath.EvalSymlinks(at)
 		if err == nil {
 			return filepath.Join(append([]string{resolved}, rest...)...), nil
@@ -153,8 +171,12 @@ func realPath(p string) (string, error) {
 		// go, and EvalSymlinks will not read one: it reports the target as
 		// missing, which is indistinguishable from an ordinary missing
 		// directory. Reading it by hand keeps a dangling link from passing as
-		// one.
+		// one. Only these steps are counted, since walking up to an existing
+		// ancestor is bounded by the depth of the path.
 		if target, rerr := os.Readlink(at); rerr == nil {
+			if hops++; hops > maxLinkHops {
+				return "", fmt.Errorf("%s: too many symbolic links", p)
+			}
 			if !filepath.IsAbs(target) {
 				target = filepath.Join(filepath.Dir(at), target)
 			}
@@ -165,10 +187,9 @@ func realPath(p string) (string, error) {
 		if parent == at {
 			// The walk reached the volume root without finding anything that
 			// exists. Nothing can be resolved, so p stands as it is.
-			return filepath.Clean(p), nil
+			return abs, nil
 		}
 		rest = append([]string{filepath.Base(at)}, rest...)
 		at = parent
 	}
-	return "", fmt.Errorf("%s: too many symbolic links", p)
 }

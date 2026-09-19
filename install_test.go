@@ -1459,3 +1459,24 @@ func TestInstallFollowsLinksThatStayInReach(t *testing.T) {
 		t.Errorf("--dir did not write outside the project: %v", err)
 	}
 }
+
+// The bound is the project, and a destination can leave it without a symbolic
+// link: a custom Agent's ProjectDir is joined to the root and can climb out of
+// it. That is refused too, so the message must not blame a link that is not
+// there.
+func TestProjectDirCannotClimbOutOfTheProject(t *testing.T) {
+	climbing := skillembed.Agent{
+		Name:       "climbing",
+		Title:      "Climbing",
+		ProjectDir: "../shared/skills",
+	}
+	in, _ := newInstaller(t, skillembed.WithAgents(climbing))
+
+	_, err := in.Targets(skillembed.InstallOptions{})
+	if !errors.Is(err, skillembed.ErrProjectEscapes) {
+		t.Fatalf("Targets = %v, want ErrProjectEscapes", err)
+	}
+	if strings.Contains(err.Error(), "symbolic link") {
+		t.Errorf("the message blames a symbolic link that is not there: %v", err)
+	}
+}

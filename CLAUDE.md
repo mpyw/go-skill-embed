@@ -86,6 +86,14 @@ one.
 a link is a normal arrangement, and the user made it. The bound exists because
 a project root is whatever was cloned, which is someone else's choice.
 
+**Exempting a custom `Agent` whose `ProjectDir` climbs out with `..`.** It
+could be read as the embedding tool's own choice, the way `--dir` is. It is
+refused with everything else, because a project install landing outside the
+project is the thing being stopped and who wrote the path does not change
+that. `WithProjectRoot` and `--dir` are how a tool aims elsewhere. The
+refusal's text says "outside the project root" rather than naming a link, so
+this reader is not sent looking for one.
+
 **Re-checking at write time.** The check runs in `Targets`, so a link created
 between there and the rename is not caught. The case it is for is a link
 committed into a repository, which is there before the run starts.

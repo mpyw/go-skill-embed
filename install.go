@@ -282,9 +282,14 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 		// Checked per agent rather than per target, so that the agent whose
 		// directory escapes is the one reached before any of them is written.
 		if scope == ScopeProject {
-			if err := projectroot.Within(root, abs); err != nil {
+			// Only the refusal earns the advice. realPath also reports a
+			// permission failure or a symlink cycle, and telling the reader to
+			// pass --dir would send them past the thing that is wrong.
+			if err := projectroot.Within(root, abs); errors.Is(err, projectroot.ErrOutsideRoot) {
 				return nil, fmt.Errorf("skillembed: %w, so pass --dir to write"+
 					" there on purpose", err)
+			} else if err != nil {
+				return nil, err
 			}
 		}
 		if i, ok := index[abs]; ok {
