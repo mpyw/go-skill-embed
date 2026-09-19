@@ -16,6 +16,16 @@ import (
 // --scope user already writes there on purpose.
 var ErrProjectIsHome = projectroot.ErrIsHome
 
+// ErrProjectEscapes reports that a project scope destination is taken outside
+// the project root by a symbolic link.
+//
+// The path a project install writes to comes from the project, so a link
+// committed at .claude/skills, or at any directory above it, aims the write
+// and a later forced removal wherever it points. Cloning a repository and
+// running the tool once is the whole of it. User scope and --dir are the user
+// naming a place, and are not bounded this way.
+var ErrProjectEscapes = projectroot.ErrOutsideRoot
+
 // projectRootOf is what project scope resolves against. WithProjectRoot wins,
 // and without it the root is searched for.
 //
