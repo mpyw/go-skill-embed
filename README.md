@@ -1,5 +1,14 @@
 # go-skill-embed
 
+[![CI](https://github.com/mpyw/go-skill-embed/actions/workflows/ci.yml/badge.svg)](https://github.com/mpyw/go-skill-embed/actions/workflows/ci.yml)
+
+| Module | Reference |
+| --- | --- |
+| `github.com/mpyw/go-skill-embed` | [![Go Reference](https://pkg.go.dev/badge/github.com/mpyw/go-skill-embed.svg)](https://pkg.go.dev/github.com/mpyw/go-skill-embed) |
+| `github.com/mpyw/go-skill-embed/skillcobra` | [![Go Reference](https://pkg.go.dev/badge/github.com/mpyw/go-skill-embed/skillcobra.svg)](https://pkg.go.dev/github.com/mpyw/go-skill-embed/skillcobra) |
+| `github.com/mpyw/go-skill-embed/skillurfavev3` | [![Go Reference](https://pkg.go.dev/badge/github.com/mpyw/go-skill-embed/skillurfavev3.svg)](https://pkg.go.dev/github.com/mpyw/go-skill-embed/skillurfavev3) |
+| `github.com/mpyw/go-skill-embed/skillurfavev2` | [![Go Reference](https://pkg.go.dev/badge/github.com/mpyw/go-skill-embed/skillurfavev2.svg)](https://pkg.go.dev/github.com/mpyw/go-skill-embed/skillurfavev2) |
+
 Ship agent skills inside a Go binary, and give that binary a `skill install`
 command.
 
