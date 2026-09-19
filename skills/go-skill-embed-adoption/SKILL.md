@@ -107,8 +107,8 @@ go build -o /tmp/mytool . || exit 1
 > [!IMPORTANT]
 > Project scope resolves against the project, not the working directory. The
 > search walks up to the repository root, and the home directory is refused.
-> Run the check from a subdirectory as well, and confirm the paths are the ones
-> intended.
+> Run the check from a subdirectory as well. Every project scope run prints
+> `Project root:`, so compare that line between the two runs.
 
 For a `go/analysis` driver, check that the driver still works.
 

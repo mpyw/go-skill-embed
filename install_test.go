@@ -1219,3 +1219,41 @@ func TestSkillSetWithoutSkills(t *testing.T) {
 		t.Errorf("Install wrote %+v from a set that holds nothing", results)
 	}
 }
+
+// A run resolves the project by searching, so a run from a subdirectory can
+// land somewhere the reader did not expect. The output names the decision
+// rather than leaving it to be inferred from a leaf path.
+func TestOutputNamesTheProjectRoot(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t)
+
+	statuses, err := in.Status(ctx, skillembed.InstallOptions{Scope: skillembed.ScopeProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statuses[0].Target.Root; got != root {
+		t.Errorf("Root = %q, want %q", got, root)
+	}
+	if !strings.Contains(skillembed.RenderCLIStatus(statuses), "Project root: "+root) {
+		t.Errorf("the listing does not name the root:\n%s", skillembed.RenderCLIStatus(statuses))
+	}
+
+	// A named directory is the destination outright, and user scope has no
+	// project, so neither carries one.
+	for _, o := range []skillembed.InstallOptions{
+		{Dir: filepath.Join(root, "skills")},
+		{Scope: skillembed.ScopeUser},
+	} {
+		t.Setenv("HOME", t.TempDir())
+		statuses, err := in.Status(ctx, o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := statuses[0].Target.Root; got != "" {
+			t.Errorf("%+v: Root = %q, want empty", o, got)
+		}
+		if strings.Contains(skillembed.RenderCLIStatus(statuses), "Project root:") {
+			t.Errorf("%+v: the listing names a root it does not have", o)
+		}
+	}
+}

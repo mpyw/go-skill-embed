@@ -97,6 +97,13 @@ The directories match `gh skill install`.
 > root. The home directory holds the user scope directories, so a project
 > installation there would sit in front of every other project. `--scope user`
 > writes there on purpose, and `--dir` names any directory outright.
+>
+> Because the answer depends on where the command was run, every project scope
+> run names it.
+>
+> ```
+> Project root: /home/me/repo
+> ```
 
 Five of the six share `.agents/skills` at project scope. Selecting several of
 them resolves to one directory. Each skill is written there once.

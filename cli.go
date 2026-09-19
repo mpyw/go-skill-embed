@@ -120,6 +120,18 @@ func (in *Installer) cliOut() io.Writer {
 	return in.out
 }
 
+// cliProjectLine names the project a run resolved to.
+//
+// The destinations in each row say it too, but a reader has to infer it from a
+// leaf path, and a run from a subdirectory can resolve somewhere they did not
+// expect. Naming the decision is cheaper than noticing it.
+func cliProjectLine(root string) string {
+	if root == "" {
+		return ""
+	}
+	return "Project root: " + root + "\n\n"
+}
+
 // cliSelectorNames renders selectors for the --agent help and its default.
 func cliSelectorNames(selectors []AgentSelector) []string {
 	out := make([]string, len(selectors))
@@ -254,6 +266,9 @@ func (in *Installer) cliList(ctx context.Context, args []string) error {
 // what it was asked about.
 func RenderCLIStatus(statuses []InstallStatus) string {
 	var b bytes.Buffer
+	if len(statuses) > 0 {
+		b.WriteString(cliProjectLine(statuses[0].Target.Root))
+	}
 
 	seen := map[string]bool{}
 	for _, st := range statuses {
@@ -285,6 +300,9 @@ func RenderCLIResults(results []InstallResult, dryRun bool) string {
 		prefix = "would be "
 	}
 	var b bytes.Buffer
+	if len(results) > 0 {
+		b.WriteString(cliProjectLine(results[0].Target.Root))
+	}
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	for _, r := range results {
 		note := ""

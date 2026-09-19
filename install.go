@@ -187,6 +187,9 @@ type InstallTarget struct {
 	Dir string
 	// Agents read from Dir. It is empty when InstallOptions.Dir was used.
 	Agents []Agent
+	// Root is the project directory Dir was resolved against. It is empty for
+	// user scope, and when InstallOptions.Dir named the destination outright.
+	Root string
 }
 
 // Label renders the target for human readable output.
@@ -257,6 +260,13 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 		return nil, ErrNoAgentSelected
 	}
 
+	// Only a project install has a project. User scope writes into the home
+	// directory, and a named directory is the destination outright.
+	stamped := ""
+	if scope == ScopeProject {
+		stamped = root
+	}
+
 	var targets []InstallTarget
 	index := map[string]int{}
 	for _, a := range agents {
@@ -273,7 +283,7 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 			continue
 		}
 		index[abs] = len(targets)
-		targets = append(targets, InstallTarget{Dir: abs, Agents: []Agent{a}})
+		targets = append(targets, InstallTarget{Dir: abs, Agents: []Agent{a}, Root: stamped})
 	}
 	return targets, nil
 }

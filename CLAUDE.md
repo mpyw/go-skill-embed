@@ -209,6 +209,14 @@ other project, and `~/.claude/skills` in particular is exactly where `--scope
 user` writes. Landing there is refused rather than allowed, because the
 alternative is a user-wide install that nothing announced.
 
+**Leaving the resolved project root to be inferred from a leaf path.** The
+search depends on where the command was run, so a run from a subdirectory and
+a run from the repository root can disagree, and each row's destination is the
+only sign of it. Every project scope run names the root instead. Restricting
+the markers to the selected agents was the other proposal and was rejected: it
+makes `--agent claude-code` and `--agent all` resolve `.claude/skills` to
+different directories in one repository.
+
 **Writing the first-argument guard up as a limitation.** The README used to say
 that a package directory named `skill` is hidden by it, which reads as
 something taken away. Nothing is. `go` reads a bare name as an import path and
