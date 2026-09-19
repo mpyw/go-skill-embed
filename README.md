@@ -423,6 +423,11 @@ mise install
 `scripts/regolden.py` rewrites the help text that the examples assert. Run it
 after changing a flag or a default.
 
+A release is cut by the **Tag and Release** workflow. It takes a version, tags
+every module with it, and publishes one release on the core tag that stands
+for all of them. `scripts/modules.sh` is where the module list comes from, so
+a new adapter needs no change to the workflows.
+
 Declaration scopes are enforced by [declscope](https://github.com/mpyw/declscope),
 at `qualify: ondemand` with `exported: true`. The settings are in
 `.declscope.yaml`, and its adoption skill is installed at

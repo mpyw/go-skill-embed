@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., v1.2.3) - tag must already exist"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to release (e.g., v1.2.3) - tag must already exist"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # ===========================================================================
+  # One release, on the core tag, standing for every module tagged with it.
+  #
+  # There is nothing to build. This is a library, so a consumer reaches it with
+  # `go get` and an attached binary would be a file nobody downloads. A release
+  # per module would be four pages saying the same thing.
+  # ===========================================================================
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version }}
+          fetch-depth: 0
+
+      # The list is read from the repository, so it cannot fall behind the tags
+      # the Tag workflow actually pushed.
+      - name: Write the preamble
+        id: preamble
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "Every module in this repository is tagged \`$VERSION\`. This release stands"
+            echo "for all of them."
+            echo
+            echo "| Module | Import |"
+            echo "| --- | --- |"
+            echo "| core | \`github.com/$REPO\` |"
+            while read -r dir; do
+              echo "| \`$dir\` | \`github.com/$REPO/$dir\` |"
+            done < <(./scripts/modules.sh)
+            echo
+            echo '```console'
+            echo "go get github.com/$REPO@$VERSION"
+            echo '```'
+          } > preamble.md
+          {
+            echo "text<<PREAMBLE_EOF"
+            cat preamble.md
+            echo "PREAMBLE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          PREAMBLE: ${{ steps.preamble.outputs.text }}
+        run: |
+          gh release create "$VERSION" \
+            --verify-tag \
+            --title "$VERSION" \
+            --notes "$PREAMBLE" \
+            --generate-notes

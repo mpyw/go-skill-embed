@@ -238,6 +238,13 @@ error.
 than as the mistake it is. The front end rejects it, because it is the only
 place that knows the flag was given.
 
+**A release per module.** Four pages saying the same thing, and a consumer
+then has to work out which adapter goes with which core. Every module is
+tagged with one version, and the release on the core tag says so.
+
+**goreleaser.** There is nothing to build. A consumer reaches a library with
+`go get`, and an attached binary would be a file nobody downloads.
+
 ## Known and left alone
 
 An adversarial review raised these. They are recorded so the next reader does
