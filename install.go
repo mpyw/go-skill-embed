@@ -403,7 +403,15 @@ func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallSt
 	// just wrote. os.SameFile settles it without this having to guess what the
 	// file system treats as equal.
 	embedded := make([]os.FileInfo, 0, in.set.Len())
+	// What the binary still writes. The digest covers contents alone, the
+	// directory name is not in it, so a copy of an installed skill carries a
+	// valid stamp and a digest that checks out. A user who copies one aside
+	// before editing it, or keeps a second under another name, has not left an
+	// orphan behind, and a sweep that takes it away destroys work it was never
+	// asked about.
+	carried := make(map[string]bool, in.set.Len())
 	for _, sk := range in.set.Skills() {
+		carried[sk.Digest()] = true
 		info, err := os.Stat(filepath.Join(t.Dir, sk.Name))
 		if err != nil {
 			continue
@@ -443,6 +451,20 @@ func (in *Installer) orphaned(ctx context.Context, t InstallTarget) ([]InstallSt
 		recorded := fields[MetaKeyEmbeddedDigest]
 		if recorded == "" || fields[MetaKeyEmbeddedBy] != in.toolName {
 			continue // someone else's, or carrying no claim at all
+		}
+		// A copy of a skill the binary still carries, under a name of the
+		// user's choosing. Two things say so: the installed name resolves in
+		// the set, which is what a copy of a live skill reads and what a
+		// dropped one never does, or the recorded digest is one the binary
+		// still writes, which answers for a SKILL.md with no name field. A
+		// dropped skill matches neither.
+		if name := fields["name"]; name != "" {
+			if _, ok := in.set.Lookup(name); ok {
+				continue
+			}
+		}
+		if carried[recorded] {
+			continue
 		}
 
 		st := InstallStatus{
@@ -601,7 +623,13 @@ func (in *Installer) Install(ctx context.Context, o InstallOptions) ([]InstallRe
 			r.Action, r.Reason = ActionSkipped, "edited after installing; use --force"
 			blocked = append(blocked, st)
 		case st.State == StateForeign && !o.Force:
+			// An unverifiable orphan reached this too, and its frontmatter
+			// names this tool, so "installed by something else" would be a
+			// claim the file itself contradicts.
 			r.Action, r.Reason = ActionSkipped, "installed by something else; use --force"
+			if !st.Embedded {
+				r.Reason = "cannot be read to check it; use --force"
+			}
 			blocked = append(blocked, st)
 		case !st.Embedded:
 			// An orphan the digest could not clear, reached with --force.

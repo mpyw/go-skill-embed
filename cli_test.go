@@ -103,7 +103,7 @@ func TestSubcommandHelp(t *testing.T) {
 	help := out.String()
 
 	for _, want := range []string{
-		"Install the agent skills embedded in testtool.",
+		"Install the agent skills embedded in testtool, and remove the ones it no longer carries.",
 		"  testtool skill install [flags] [skill...]",
 		"  -agent value", // one dash, as a flag package tool prints
 		"  -scope value", // a flag.Value, like -agent
@@ -181,7 +181,7 @@ func TestSubcommandHelpSaysWhichSubcommand(t *testing.T) {
 	for _, c := range []struct {
 		sub, summary string
 	}{
-		{"install", "Install the agent skills embedded in testtool."},
+		{"install", "Install the agent skills embedded in testtool, and remove the ones it no longer carries."},
 		{"uninstall", "Remove the agent skills embedded in testtool."},
 		{"list", "Show the agent skills embedded in testtool, and where each one stands."},
 	} {

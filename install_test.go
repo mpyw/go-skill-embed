@@ -1850,3 +1850,114 @@ func TestAnOrphanThatCannotBeHashedIsForeign(t *testing.T) {
 		}
 	}
 }
+
+// The digest covers contents, not the directory name, so a copy of an
+// installed skill carries a valid stamp under whatever name the user gave it.
+// Sweeping on the stamp alone took away a working copy somebody made on
+// purpose, with no --force and nothing but an ActionRemoved row to show for it.
+func TestACopyOfALiveSkillIsNotAnOrphan(t *testing.T) {
+	ctx := t.Context()
+	in, _ := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, in, opts)
+
+	// demo-skill has a name field; bare-skill has none, so its copy can only
+	// be recognised by the digest.
+	for _, from := range []string{"demo-skill", "bare-skill"} {
+		copyTree(t, filepath.Join(dir, from), filepath.Join(dir, from+"-wip"))
+	}
+
+	results, err := in.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.Action == skillembed.ActionRemoved {
+			t.Errorf("removed %s, which is the user's copy of a skill still carried", r.Path)
+		}
+	}
+	for _, from := range []string{"demo-skill", "bare-skill"} {
+		if _, err := os.Stat(filepath.Join(dir, from+"-wip", skillembed.SkillFile)); err != nil {
+			t.Errorf("the copy of %s is gone: %v", from, err)
+		}
+	}
+}
+
+// The sparing above must not reach a skill the binary really has dropped, even
+// when the user renamed its directory.
+func TestARenamedDropOfASkillIsStillSwept(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	renamed := filepath.Join(dir, "bare-skill-keep")
+	if err := os.Rename(filepath.Join(dir, "bare-skill"), renamed); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+	if _, err := next.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(renamed); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a dropped skill survived because it had been renamed: %v", err)
+	}
+}
+
+// An orphan this tool stamped but cannot hash is not "installed by something
+// else": its own frontmatter says otherwise, and telling the user that sends
+// them looking for a tool that was never involved.
+func TestAnUnreadableOrphanIsNotBlamedOnAnotherTool(t *testing.T) {
+	ctx := t.Context()
+	old, root := newInstaller(t)
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := old.Install(ctx, opts); err != nil {
+		t.Fatal(err)
+	}
+	dir := installedDir(t, old, opts)
+	if err := os.Symlink(filepath.Join(root, "elsewhere"), filepath.Join(dir, "bare-skill", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	next := reducedInstaller(t, root, "demo-skill")
+	results, _ := next.Install(ctx, opts)
+	for _, r := range results {
+		if r.Skill.Name != "bare-skill" {
+			continue
+		}
+		if strings.Contains(r.Reason, "something else") {
+			t.Errorf("reason = %q, but the frontmatter names this tool", r.Reason)
+		}
+		if r.Reason == "" {
+			t.Error("a skipped skill was given no reason")
+		}
+	}
+}
+
+func copyTree(t *testing.T, from, to string) {
+	t.Helper()
+	err := filepath.WalkDir(from, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rest, _ := filepath.Rel(from, p)
+		target := filepath.Join(to, rest)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

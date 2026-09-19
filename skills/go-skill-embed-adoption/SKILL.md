@@ -82,10 +82,22 @@ from an analyzer's `Doc`.
 | `outdated` | Not what this binary would write | Overwrites it |
 | `modified` | Edited after installing | Skips it, and reports `ErrNeedsForce` |
 | `foreign` | Not something this tool wrote | Skips it, and reports `ErrNeedsForce` |
+| `orphaned` | Written by this tool, and no longer embedded | Removes it |
 
 `outdated` covers a newer copy in the binary and a file that lost its
 executable bit. `foreign` covers a hand-written skill, a directory with no
 `SKILL.md`, and one that cannot be read at all.
+
+> [!WARNING]
+> A full `install` deletes directories, not only writes them. Once your tool
+> drops or renames a skill, nothing else would ever reach the copy an earlier
+> version installed, so `install` removes it. Tell your users, and say it in
+> your own release notes when you drop one.
+>
+> It is claimed only on this tool's own stamp with a digest that still checks
+> out, and only for a name the binary no longer carries. A copy of a skill it
+> still carries, a hand-written directory, another tool's, and anything
+> `.`-prefixed are all left alone. `install <name>` sweeps nothing.
 
 A skipped skill does not stop the others. `Install` returns one result per
 skill either way, and the error only says that something was left alone.
@@ -101,8 +113,12 @@ go build -o /tmp/mytool . || exit 1
 /tmp/mytool skill                      # the command, and the skills it carries
 /tmp/mytool skill install --dry-run    # where they would go
 /tmp/mytool skill install
-/tmp/mytool skill list                 # every row should read up-to-date
+/tmp/mytool skill list                 # every embedded row should read up-to-date
 ```
+
+An `orphaned` row here is a directory an earlier build of your tool installed
+and this one no longer carries. On a first adoption there should be none; if
+there is, check that `WithToolName` matches what the earlier build used.
 
 > [!IMPORTANT]
 > Project scope resolves against the project, not the working directory. The

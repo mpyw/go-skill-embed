@@ -116,6 +116,15 @@ rescue copy is a whole installation, stamp and all, so it reads as an orphan.
 It is also the only copy left, and the error that abandoned it names it for
 the user to recover. Every dot-prefixed entry is passed over.
 
+**Claiming an orphan on the stamp and the digest alone.** The digest covers
+contents, not the directory name, so every copy of an installed skill carries
+a stamp that checks out. `cp -R demo-skill demo-skill-wip` was therefore
+removed by the next plain `install`, with no `--force` and nothing but an
+`ActionRemoved` row. A directory is now spared when its `name` field resolves
+in the set, or when its recorded digest is one the binary still writes; the
+second answers for a `SKILL.md` with no `name` field. A skill that really was
+dropped matches neither, even renamed.
+
 **Sweeping on `install <name>`.** Only a run over the whole set knows what is
 missing from it. A named run is about those names, and removing a skill it was
 never asked about on the way past is not something the user could have
@@ -325,7 +334,7 @@ disk. That one is not on the list below: `projectroot.Within` refuses it.
 | The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
 | A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
 | A user's own `chmod +x` is reverted | The state is `outdated` either way, and install repairs it without asking |
-| `uninstall` exits 0 where `install` exits 1 | Both skip a blocked destination and say so. Only install treats it as a failure |
+| `uninstall` exits 0 where `install` exits 1 | Both skip a blocked destination and say so. Only install treats it as a failure. It follows that `uninstall` can leave an edited orphan behind and still exit 0, which the README now states rather than promising an empty directory |
 | Names differing only by Unicode normalization are not caught | `strings.ToLower` is not the file system's equivalence relation. It catches the ASCII case, which is the one that happens |
 | `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |
 | `--agent ""` says "no agent selected" | The value is dropped as empty before anything can name it. `ErrNoAgentSelected` at least makes it matchable |

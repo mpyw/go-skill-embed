@@ -275,7 +275,7 @@ copy and its embedded original hash the same.
 > | `install` | Removes it, and says so |
 > | `install <name>` | Leaves it. The run is about the named skills |
 > | `install --dry-run` | Reports the removal without making it |
-> | `uninstall` | Removes it, so a full uninstall leaves nothing behind |
+> | `uninstall` | Removes it, so a full uninstall leaves nothing this tool wrote. An edited or unreadable one still needs `--force`, and `uninstall` exits 0 either way |
 > | Edited since it was installed | Reads as `modified`, so it needs `--force` |
 > | Unreadable, such as one holding a symlink | Reads as `foreign`, so it needs `--force` |
 > | A `.`-prefixed directory beside the skills | Left alone, including a rescue copy |
