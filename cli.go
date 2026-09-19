@@ -272,7 +272,9 @@ func RenderCLIStatus(statuses []InstallStatus) string {
 
 	seen := map[string]bool{}
 	for _, st := range statuses {
-		if seen[st.Skill.Name] {
+		// The heading is what the binary carries. An orphan is on the disk and
+		// not in the binary, so it belongs in the table below and nowhere else.
+		if st.State == StateOrphaned || seen[st.Skill.Name] {
 			continue
 		}
 		seen[st.Skill.Name] = true

@@ -256,6 +256,40 @@ copy and its embedded original hash the same.
 | `outdated` | Not what this binary would write | Overwrites it |
 | `modified` | The user edited it after installing | Skips it, and reports `ErrNeedsForce` |
 | `foreign` | Not something this tool wrote | Skips it, and reports `ErrNeedsForce` |
+| `orphaned` | This tool wrote it, it is unchanged, and the binary no longer carries it | Removes it |
+
+> [!IMPORTANT]
+> A version that drops or renames a skill leaves the old directory behind, and
+> nothing would ever reach it again: every walk starts from the embedded set,
+> so `install` would pass it by, `list` would not mention it, and `uninstall`
+> would leave it there for good. The agent, meanwhile, goes on reading it.
+>
+> `install` therefore removes it. All three of these have to hold, and each
+> one is doing work:
+>
+> | | |
+> | --- | --- |
+> | `x-embedded-by` names this tool | Nothing anybody else put there is in reach, including another tool built on this library |
+> | The contents still hash to the recorded digest | It is byte for byte what this tool left, so nothing is lost that the binary could not write again |
+> | The binary has no skill of that name | It is not something still being installed |
+>
+> A directory that fails the digest is not removed and not reported. It held
+> this tool's work once and holds something else now, which is what a shipped
+> skill copied and then edited into one of the user's own looks like.
+>
+> `--force` has no part in this. It exists to overwrite what is in the way of
+> an installation, and nothing is being installed over an orphan, so there is
+> no conflict for it to resolve.
+>
+> | | |
+> | --- | --- |
+> | `install` | Removes it, and says so |
+> | `install <name>` | Leaves it, unless it is one of the names |
+> | `uninstall <name>` | Reaches one, since `list` prints them |
+> | `install --dry-run` | Reports the removal without making it |
+> | `uninstall` | Removes it, so a full uninstall leaves nothing of this tool's |
+>
+> This applies to both scopes, and to `--dir`.
 
 A skipped skill does not stop the others. `Install` writes everything it can,
 returns one `InstallResult` per skill either way, and returns an error wrapping
