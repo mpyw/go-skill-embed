@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mpyw/go-skill-embed/internal/manifest"
+	"github.com/mpyw/go-skill-embed/internal/projectroot"
 	"github.com/mpyw/go-skill-embed/internal/skillfs"
 )
 
@@ -277,6 +278,14 @@ func (in *Installer) Targets(o InstallOptions) ([]InstallTarget, error) {
 		abs, err := filepath.Abs(dir)
 		if err != nil {
 			return nil, err
+		}
+		// Checked per agent rather than per target, so that the agent whose
+		// directory escapes is the one reached before any of them is written.
+		if scope == ScopeProject {
+			if err := projectroot.Within(root, abs); err != nil {
+				return nil, fmt.Errorf("skillembed: %w, so pass --dir to write"+
+					" there on purpose", err)
+			}
 		}
 		if i, ok := index[abs]; ok {
 			targets[i].Agents = append(targets[i].Agents, a)

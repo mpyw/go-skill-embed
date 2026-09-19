@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -116,4 +117,83 @@ func TestFindStopsAtTheRepositoryRoot(t *testing.T) {
 	if resolve(t, got) != resolve(t, repo) {
 		t.Errorf("root = %s, want %s; the walk passed the repository root", got, repo)
 	}
+}
+
+func TestWithin(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	mkdir(t, filepath.Join(root, ".claude"))
+
+	t.Run("a directory that is not there yet", func(t *testing.T) {
+		// The usual case. Nothing below .claude exists, and the answer still
+		// has to be where the directories would be created.
+		if err := Within(root, filepath.Join(root, ".claude", "skills")); err != nil {
+			t.Errorf("Within = %v, want nil", err)
+		}
+	})
+
+	t.Run("a link that stays inside", func(t *testing.T) {
+		mkdir(t, filepath.Join(root, "shared"))
+		link := filepath.Join(root, ".claude", "inside")
+		symlink(t, filepath.Join(root, "shared"), link)
+
+		if err := Within(root, filepath.Join(link, "skills")); err != nil {
+			t.Errorf("Within = %v, want nil; a link within the project is the project's own", err)
+		}
+	})
+
+	t.Run("a link that leaves", func(t *testing.T) {
+		link := filepath.Join(root, ".claude", "skills")
+		symlink(t, outside, link)
+
+		err := Within(root, filepath.Join(link, "demo"))
+		if !errors.Is(err, ErrOutsideRoot) {
+			t.Fatalf("Within = %v, want ErrOutsideRoot", err)
+		}
+		// Naming the real destination is the whole point of the message. A
+		// reader who is told only that something is wrong cannot find the link.
+		if got := err.Error(); !strings.Contains(got, resolve(t, outside)) {
+			t.Errorf("error %q does not name where the link leads", got)
+		}
+	})
+
+	t.Run("the root itself reached through a link", func(t *testing.T) {
+		// macOS hands out /var and /tmp as links, so a temporary directory is
+		// one. Comparing unresolved paths would reject every project there.
+		alias := filepath.Join(t.TempDir(), "alias")
+		symlink(t, root, alias)
+
+		if err := Within(alias, filepath.Join(alias, ".claude", "skills")); err != nil {
+			t.Errorf("Within = %v, want nil", err)
+		}
+	})
+
+	t.Run("a link whose target is not there yet", func(t *testing.T) {
+		// EvalSymlinks reports a dangling link as missing, which is what an
+		// ordinary directory about to be created looks like. Read as that, the
+		// link would pass as a path inside the project.
+		gone := filepath.Join(outside, "not-yet")
+		link := filepath.Join(root, ".claude", "dangling")
+		symlink(t, gone, link)
+
+		if err := Within(root, filepath.Join(link, "demo")); !errors.Is(err, ErrOutsideRoot) {
+			t.Errorf("Within = %v, want ErrOutsideRoot", err)
+		}
+	})
+
+	t.Run("a sibling whose name starts with the root", func(t *testing.T) {
+		// A string prefix test without the separator reads /a/project-notes as
+		// being inside /a/project.
+		if err := Within(root, root+"-notes"); !errors.Is(err, ErrOutsideRoot) {
+			t.Errorf("Within = %v, want ErrOutsideRoot", err)
+		}
+	})
+}
+
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(link) })
 }

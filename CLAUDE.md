@@ -72,6 +72,24 @@ always reported the same situation per skill, as `ActionSkipped` with a
 verbs return results that mean something even when the error is not nil, and
 every front end prints them before returning it.
 
+**Bounding project scope with a string comparison.** `strings.HasPrefix` on
+the two paths cannot see a symbolic link, which is the only thing that moves a
+destination. Both sides are resolved with `filepath.EvalSymlinks` first, as far
+as they exist, because a skills directory usually does not yet.
+
+**Refusing every symbolic link on the way to a project destination.** A
+repository that keeps its skills elsewhere in its own tree and links to them is
+doing nothing wrong. What matters is where the link lands, not that there is
+one.
+
+**Bounding user scope the same way.** `~/.claude` moved onto another disk with
+a link is a normal arrangement, and the user made it. The bound exists because
+a project root is whatever was cloned, which is someone else's choice.
+
+**Re-checking at write time.** The check runs in `Targets`, so a link created
+between there and the rename is not caught. The case it is for is a link
+committed into a repository, which is there before the run starts.
+
 **Letting a `Digest` error out of `inspect`.** A symlink inside an installed
 skill, which is a thing a user does, made `Status` fail. `Install` and
 `Uninstall` both call `Status` first, so `--force` failed too and the only way
@@ -254,6 +272,11 @@ The threat model is the reason. Whoever can write to the skills directory is
 almost always the person running the tool, and what breaks is their own
 `~/.claude/skills`. Each of these needs the user to work against themselves,
 and none of them corrupts anything they did not touch.
+
+"Almost always" is the project root. Its contents come from whoever the
+repository was cloned from, so a symbolic link committed at `.claude/skills` or
+above it aims a project install, and a later `--force` removal, anywhere on the
+disk. That one is not on the list below: `projectroot.Within` refuses it.
 
 | | |
 | --- | --- |

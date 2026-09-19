@@ -101,11 +101,23 @@ The directories match `gh skill install`.
 > | Anywhere else inside a repository | The repository root |
 > | Outside a repository | The working directory |
 > | The home directory | Refused, with `ErrProjectIsHome` |
+> | Outside the project, through a symbolic link | Refused, with `ErrProjectEscapes` |
 >
 > The search walks up from the working directory and stops at the repository
 > root. The home directory holds the user scope directories, so a project
 > installation there would sit in front of every other project. `--scope user`
 > writes there on purpose, and `--dir` names any directory outright.
+>
+> A project install writes where the project's own tree says, and a path
+> component is followed whatever the path reads as. A symbolic link at
+> `.claude/skills`, or at any directory above it, therefore decides where the
+> bytes land, and a link is something a repository can carry: git stores one as
+> mode `120000`, so it survives a clone. The destination is resolved and
+> refused when it leaves the project root. A link that stays inside the project
+> is the project's own arrangement and is followed.
+>
+> The bound is project scope alone. User scope and `--dir` are the user naming
+> a place, so a home directory moved with a link keeps working.
 >
 > Because the answer depends on where the command was run, every project scope
 > run names it.
@@ -409,6 +421,7 @@ tell a mistyped flag from a disk that is full.
 | `ErrNoAgentSelected` | The values resolved to nothing |
 | `ErrNeedsForce` | A destination was left alone. `ForceRequiredError` names them |
 | `ErrProjectIsHome` | Project scope resolved to the home directory |
+| `ErrProjectEscapes` | A symbolic link takes a project scope destination outside the project |
 
 ## The skill for this library
 

@@ -1370,3 +1370,92 @@ func TestAgentSelectorsSplitAndRepeat(t *testing.T) {
 		}
 	}
 }
+
+// A project install writes where the project's own tree says, so a symbolic
+// link committed at .claude/skills, or at any directory above it, used to aim
+// the write and a later forced removal anywhere on the disk. Git stores a link
+// as mode 120000, so cloning a repository and running the tool once was the
+// whole of it.
+func TestProjectInstallStaysInsideTheProject(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t)
+
+	outside := t.TempDir()
+	kept := filepath.Join(outside, "keep.txt")
+	if err := os.WriteFile(kept, []byte("not the tool's"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".claude", "skills")); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	for _, tc := range []struct {
+		name string
+		run  func() error
+	}{
+		{"Targets", func() error { _, err := in.Targets(opts); return err }},
+		{"Status", func() error { _, err := in.Status(ctx, opts); return err }},
+		{"Install", func() error { _, err := in.Install(ctx, opts); return err }},
+		{"Uninstall", func() error {
+			forced := opts
+			forced.Force = true
+			_, err := in.Uninstall(ctx, forced)
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(); !errors.Is(err, skillembed.ErrProjectEscapes) {
+				t.Errorf("%s = %v, want ErrProjectEscapes", tc.name, err)
+			}
+		})
+	}
+
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "keep.txt" {
+		t.Errorf("the directory outside the project was touched: %v", entries)
+	}
+}
+
+// The bound is the project, not symbolic links. A repository that keeps its
+// skills somewhere else in its own tree and links to them is doing nothing
+// wrong, and user scope is the user's own directory to move.
+func TestInstallFollowsLinksThatStayInReach(t *testing.T) {
+	ctx := t.Context()
+	in, root := newInstaller(t)
+
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(shared, filepath.Join(root, ".claude", "skills")); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := skillembed.InstallOptions{Agents: []skillembed.AgentSelector{"claude-code"}}
+	if _, err := in.Install(ctx, opts); err != nil {
+		t.Fatalf("Install = %v, want nil", err)
+	}
+	if _, err := os.Stat(filepath.Join(shared, "demo-skill", "SKILL.md")); err != nil {
+		t.Errorf("the skill did not land through the link: %v", err)
+	}
+
+	// --dir names the destination outright, which is the way out the refusal
+	// points at, so it is not bounded by the project either.
+	outside := t.TempDir()
+	if _, err := in.Install(ctx, skillembed.InstallOptions{Dir: outside}); err != nil {
+		t.Fatalf("Install --dir = %v, want nil", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "demo-skill", "SKILL.md")); err != nil {
+		t.Errorf("--dir did not write outside the project: %v", err)
+	}
+}
