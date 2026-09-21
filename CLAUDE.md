@@ -261,6 +261,17 @@ Four things had to change before the matrix could find anything of its own.
 | `testenv.RequireSymlink` | Windows grants the privilege to an administrator or to a machine in developer mode. That belongs to the account, not to the platform, so the helper asks by making one |
 | `checkdocs.py` | `go build -o /dev/null`, a `replace` path spelled with backslashes, and `read_text` in the locale's encoding. None of the three is about the documents |
 
+What the first three-platform run found, beyond the bug it was added for:
+
+| | |
+| --- | --- |
+| macOS | `checkdocs` builds its scaffold in a temporary directory, and a mise shim outside the repository has no version to resolve: "No version is set for shim: go". It asks `go env GOROOT` from inside the repository and runs that binary now |
+| Windows | `TestWriteRestoresTheExecutableBit` read a mode back off the disk, which the fix above had not reached |
+| Windows | `examples/singlechecker` built `examplelint` under that name, and Windows will not exec a file without the extension |
+
+golangci-lint, declscope and checkdocs all passed on Windows on that run, so
+nothing had to be held back from it.
+
 `skipWithoutExecutableBits` in `install_test.go` spells the platform out with
 `runtime.GOOS`, rather than reading `skillfs.modesMatter`. The constant is
 unexported and the test is in another package, and exporting it to reach it

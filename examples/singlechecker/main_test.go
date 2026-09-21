@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,13 @@ func build(t *testing.T) string {
 	if testing.Short() {
 		t.Skip("builds a binary")
 	}
-	bin := filepath.Join(t.TempDir(), "examplelint")
+	// Windows will not exec a file without the extension, and go build takes
+	// the name it is given.
+	name := "examplelint"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	bin := filepath.Join(t.TempDir(), name)
 	out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)

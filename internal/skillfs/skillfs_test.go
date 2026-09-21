@@ -69,7 +69,10 @@ func TestWriteRestoresTheExecutableBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if script.Mode().Perm()&0o111 == 0 {
+	// Where the file system carries no executable bit there is none to set,
+	// and the mode os.Stat reports is the read-only attribute rather than
+	// anything Write chose.
+	if modesMatter && script.Mode().Perm()&0o111 == 0 {
 		t.Errorf("scripts/run.sh mode = %v, want the executable bit set", script.Mode().Perm())
 	}
 
