@@ -37,6 +37,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      # An adapter's own go.mod names the core it wants. A `replace` points at
+      # ../ so the repository builds before a tag exists, and Go ignores a
+      # `replace` in a dependency, so that line is what a consumer resolves.
+      # Nothing in the checks reads it: v0.2.0 shipped three adapters that
+      # still asked for the core at v0.1.0, and a `go get` of skillcobra
+      # v0.2.0 resolved a core without the project root guard in it.
+      - name: Check the modules ask for this core
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          wrong=""
+          while read -r mod; do
+            want="github.com/mpyw/go-skill-embed $VERSION"
+            if ! grep -q "	$want\$" "$mod"; then
+              wrong="$wrong $mod($(sed -n 's|.*github.com/mpyw/go-skill-embed \(v[0-9.]*\).*|\1|p' "$mod"))"
+            fi
+          done < <(grep -rl '	github.com/mpyw/go-skill-embed v' --include=go.mod .)
+          if [[ -n "$wrong" ]]; then
+            echo "Error: these ask for another core:$wrong"
+            echo "Expected: github.com/mpyw/go-skill-embed $VERSION"
+            exit 1
+          fi
+          echo "Every module asks for the core at $VERSION"
+
       # Every module gets the same version, so a consumer never has to work out
       # which adapter goes with which core. The list comes from the repository
       # rather than from this file, so a fourth adapter needs no change here.

@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.27.1
 
 require (
-	github.com/mpyw/go-skill-embed v0.1.0
+	github.com/mpyw/go-skill-embed v0.2.1
 	github.com/urfave/cli/v3 v3.12.0
 )
 
