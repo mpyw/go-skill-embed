@@ -423,8 +423,8 @@ app := &cli.Command{
 > A script installed without repair cannot be run by the agent.
 > The default marks any file starting with `#!` as executable.
 > Pass `WithExecutable` when your scripts have no shebang.
-> Windows has no executable bit, so nothing is set and nothing is checked
-> there, and an installed skill is judged by its contents alone.
+> Windows has no executable bit to set or to check, so an installed skill is
+> judged by its contents alone there.
 
 ## Using it as a library
 
@@ -478,6 +478,8 @@ mise install
 ./test_all.sh
 ```
 
+The checks run on Linux, macOS and Windows.
+
 `scripts/regolden.py` rewrites the help text that the examples assert. Run it
 after changing a flag or a default.
 
@@ -497,8 +499,8 @@ at `qualify: ondemand` with `exported: true`. The settings are in
 library for Rust. The two agree on what they write: the agent directories, the
 four frontmatter keys, and the digest. Under one tool name, an installation
 made by either reads as `up-to-date` to the other, and the two trees are
-identical apart from `x-embedded-at`. Its `tests/digest.rs` pins the digest to
-the value this library produces.
+identical apart from `x-embedded-at`. A test there pins the digest to the value
+this library produces.
 
 ## License
 

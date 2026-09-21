@@ -74,10 +74,18 @@ run_test "declscope" \
 # A Go block in a document is hand written, so it drifts when a signature
 # changes and nothing says so.
 #
-# A Windows runner's bash sees no python3 on the PATH, only python, and that
-# one is a Python 3. The fallback names python3 so a machine with neither
-# reports the name this script asks for.
-python=$(command -v python3 || command -v python || echo python3)
+# The interpreter is run rather than looked up. The Windows runner has python
+# and no python3, and a python.org install puts an app execution alias at
+# python3 that prints "Python was not found" and exits, so a name that
+# resolves is not a name that works. The fallback names python3, so a machine
+# with none of them reports the name this script asks for.
+python=python3
+for candidate in python3 python py; do
+    if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
+        python=$candidate
+        break
+    fi
+done
 run_test "checkdocs" \
     "$python" scripts/checkdocs.py
 

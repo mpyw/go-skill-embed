@@ -36,7 +36,6 @@ func TestBuiltInAgents(t *testing.T) {
 
 	home := t.TempDir()
 	testenv.SetHome(t, home)
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	for i, a := range got {
 		w := want[i]

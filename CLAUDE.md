@@ -6,6 +6,7 @@ Run `./test_all.sh` before claiming anything passes. It covers every module.
 | --- | --- |
 | Where prose goes | Which file takes history, and which takes only the present |
 | Rejected designs | What was tried, and the failure that ruled it out |
+| Platforms | What differs by platform, and what CI does about it |
 | Things that look wrong but are not | Deliberate oddities, so nobody "fixes" them |
 | Known and left alone | Raised in review, and accepted |
 
@@ -58,21 +59,14 @@ not do it and repairing it should not need `--force`.
 
 **Comparing the rule against a mode on a file system that has no modes.**
 Windows builds a regular file's mode from the read-only attribute alone, so
-`Mode()&0o111` is zero for every file and `HasShebang` returning true could
+`Mode()&0o111` is zero for a regular file and `HasShebang` returning true could
 never agree with it. A skill holding a shebang file read as `outdated` on every
 run, `install` rewrote it every time, and `--dry-run` reported an update that
 was not one. `modesMatter` is a build-tagged constant and
 `ExecutableBitsMatch` answers true at once where it is false, which leaves the
-digest to decide alone. Found by a reader porting the library to Rust, in
-issue #7, and covered by `ExampleInstaller_Status`: the demo skill's
-`scripts/run.sh` has a shebang, so the example prints `outdated` on Windows
-without the fix.
-
-The two files carry `//declscope:namespace skillfs`. A build tag cannot apply
-to part of a file, so the constant has to live in one of its own, and
-`qualify: ondemand` asks for a namespace in every name in the package the
-moment a second one appears. The directive says what is true: the constant is
-`skillfs.go`'s.
+digest to decide alone. Issue #7 has it, from a reader porting the library to
+Rust. `ExampleInstaller_Status` covers it: the demo skill's `scripts/run.sh`
+has a shebang, so the example prints `outdated` on Windows without the fix.
 
 ### Installing
 
@@ -232,6 +226,16 @@ are the `With*` options, and three are `Run`, `Intercept` and `ErrHelp`. Both
 groups are written by hand in a user's `main`, where a namespace in the name
 costs more than it explains. Nothing else is suppressed.
 
+**Declaring `modesMatter` shared with `//declscope:package`.** A build tag
+cannot apply to part of a file, so the constant lives in two files of its own,
+and each one is a namespace. Two rules fire on that: `skillfs.go` reaching the
+constant is a boundary crossing, and `qualify: ondemand` wakes up the moment a
+package holds a second namespace, which asks for `modesUnixModesMatter` and
+for a rename of every other name in the package as well. Measured:
+`//declscope:package` clears the first and leaves the second.
+`//declscope:namespace skillfs` clears both, and says what is true, which is
+that the constant is `skillfs.go`'s.
+
 **Exporting an accessor to get a field across a file.** declscope's boundary
 rule only polices unexported declarations, so exporting something is the one
 guaranteed way to silence it. Each such accessor was a permanent public promise
@@ -241,47 +245,71 @@ thing in the source and costs nothing outside the module. `CommandName`,
 `ToolName`, `DefaultScope` and `AgentChoices` stay exported, because an adapter
 in another module really does need them.
 
-### Platforms
+## Platforms
 
-**Linux alone in CI.** Every platform dependent line in this repository
-carried a comment about its platform behaviour and had never been run anywhere
-but Linux: the two-rename swap, the executable bit, `filepath.EvalSymlinks`,
-`filepath.Rel` across volumes, `filepath.ListSeparator`. The `check` job is a
-three-platform matrix now, with `fail-fast` off, because a failure on one
-platform is the interesting case and the answer is usually whether the other
-two agree. `coverage` stays on Linux: which lines run is the same question
-everywhere.
+**Rejected: Linux alone in CI.** Every platform-dependent line in this
+repository carried a comment about its platform behaviour and had never been
+run anywhere but Linux: the two-rename swap, the executable bit,
+`filepath.EvalSymlinks`, `filepath.Rel` across volumes,
+`filepath.ListSeparator`. The `check` job is a three-platform matrix now, with
+`fail-fast` off, because a failure on one platform is the interesting case and
+the answer is usually whether the other two agree. `coverage` stays on Linux:
+which lines run is the same question everywhere.
 
-Four things had to change before the matrix could find anything of its own.
+**Rejected: running `test_all.sh` only on Linux and the tests alone
+elsewhere.** It would have kept `checkdocs` off Windows at the cost of one
+flag, and it would also keep golangci-lint and declscope off the Windows
+build, which is where the platform stubs are. The three Windows
+`checkdocs.py` fixes were smaller than the flag, and none of them made the
+script worse. golangci-lint, declscope and checkdocs all run on Windows, so
+nothing had to be held back.
+
+Four things had to change before the matrix could report anything but its own
+setup.
 
 | | |
 | --- | --- |
-| `.gitattributes` | A Windows runner's `core.autocrlf` rewrites the working tree. A shell script's shebang line then ends in a carriage return, and an `// Output:` comment is compared against output the test produced with LF |
-| `testenv.SetHome` | `os.UserHomeDir` reads `USERPROFILE` on Windows. A test setting `HOME` alone passes on Linux and reaches the developer's real home directory on Windows, which is where a user scope install would land |
-| `testenv.RequireSymlink` | Windows grants the privilege to an administrator or to a machine in developer mode. That belongs to the account, not to the platform, so the helper asks by making one |
-| `checkdocs.py` | `go build -o /dev/null`, a `replace` path spelled with backslashes, and `read_text` in the locale's encoding. None of the three is about the documents |
+| `.gitattributes` | A Windows runner's `core.autocrlf` rewrites the working tree, and a shebang line ending in a carriage return is not a shebang. The `// Output:` comments were the other reason given and were not one: `go/ast` strips a trailing carriage return before an example is compared, and a checkout converted to CRLF passes every test. A skill tree is exempted with `-text`, because git normalizing one silently changes a digest |
+| `testenv.SetHome` | `os.UserHomeDir` reads `USERPROFILE` on Windows. A test setting `HOME` alone passes on Linux and reaches the developer's real home directory on Windows, which is where a user scope install would land. It clears `CLAUDE_CONFIG_DIR` too, which overrides the home-derived path outright: with that set, three adapter tests failed |
+| `testenv.RequireSymlink` | Windows gates a symbolic link behind a privilege an account may or may not hold, so the helper asks by making one. A refusal reaches stderr as well as the test, because `go test` prints a skip only under `-v` and a run that quietly dropped every symbolic link test reads exactly like one that passed them |
+| `checkdocs.py` | `go build -o /dev/null`, a `replace` path spelled with backslashes and unquoted, and the locale's encoding. None of them is about the documents |
 
 What the first three-platform run found, beyond the bug it was added for:
 
 | | |
 | --- | --- |
 | macOS | `checkdocs` builds its scaffold in a temporary directory, and a mise shim outside the repository has no version to resolve: "No version is set for shim: go". It asks `go env GOROOT` from inside the repository and runs that binary now |
-| Windows | `TestWriteRestoresTheExecutableBit` read a mode back off the disk, which the fix above had not reached |
+| Windows | `TestWriteRestoresTheExecutableBit` read a mode back off the disk, which `modesMatter` had not reached |
 | Windows | `examples/singlechecker` built `examplelint` under that name, and Windows will not exec a file without the extension |
-
-golangci-lint, declscope and checkdocs all passed on Windows on that run, so
-nothing had to be held back from it.
 
 `skipWithoutExecutableBits` in `install_test.go` spells the platform out with
 `runtime.GOOS`, rather than reading `skillfs.modesMatter`. The constant is
 unexported and the test is in another package, and exporting it to reach it
-would be a promise made for a test.
+would be a promise made for a test. The duplication fails loudly: forcing
+`modesMatter` to false on macOS makes both guarded tests fail rather than pass
+vacuously.
 
-**Running `test_all.sh` only on Linux and the tests alone elsewhere.** It
-would have kept `checkdocs` off Windows for the cost of one flag, and it also
-keeps golangci-lint and declscope off the Windows build, which is where the
-platform stubs are. The three `checkdocs.py` fixes were smaller than the flag, and
-none of them made the script worse.
+Two tests assert nothing on Windows and say so, rather than passing quietly.
+`TestWriteSucceedsWhenTheAsideTreeCannotBeRemoved` makes a directory
+unremovable with a mode, which there sets the read-only attribute that
+`os.RemoveAll` clears on its own, so the path it exists for is never entered.
+`TestExecutableBitsMatchWithoutModes` is the other way round: it is the only
+test that states what `ExecutableBitsMatch` promises where there is no bit, so
+it skips everywhere else.
+
+`TestWithinAcrossVolumes` is the branch the matrix was supposed to reach and
+did not. `filepath.Rel` answers with an error across two volumes and `Within`
+reads that as outside, and every other test took both paths from one root. The
+runner hands over two volumes for free: the workspace is on `D:` and
+`t.TempDir()` is on `C:`.
+
+**Rejected: letting `RequireSymlink` skip on CI as it does locally.**
+`go test` prints a skip only under `-v`, and `internal/projectroot`'s line is
+`ok ... 0.164s` whether seven tests ran or seven skipped. A runner image that
+stopped granting the privilege would drop the whole of `Within`, which guards
+the one threat this repository does not leave alone, behind a green tick. It
+skips for a developer, who should be able to run the suite without the
+privilege, and fails when `GITHUB_ACTIONS` is set.
 
 ## Things that look wrong but are not
 
@@ -403,6 +431,7 @@ disk. That one is not on the list below: `projectroot.Within` refuses it.
 | The installed skill directory is 0700 | Inherited from `os.MkdirTemp`. Its subdirectories are 0755 |
 | A file starting with `#![no_std]` becomes executable | The shebang test cannot tell it from a script. `WithExecutable` is the way out |
 | A user's own `chmod +x` is reverted | The state is `outdated` either way, and install repairs it without asking |
+| A Unix binary installing onto a mount that synthesizes modes reads as `outdated` forever | `modesMatter` is decided by `GOOS`, and a `GOOS=linux` binary writing to vfat, exfat, SMB without unix extensions, or WSL2's `/mnt/c` gets one mode for every file. Whichever way it goes, some file disagrees with the rule. The symptoms are issue #7's and so is the cost: a rewrite of a byte-identical tree on every run. A per-destination probe was the other proposal and cannot tell that mount from a user who ran `chmod +x` on one file, which is the case the check exists for |
 | `uninstall` exits 0 where `install` exits 1 | Both skip a blocked destination and say so. Only install treats it as a failure |
 | Names differing only by Unicode normalization are not caught | `strings.ToLower` is not the file system's equivalence relation. It catches the ASCII case, which is the one that happens |
 | `--force` with `--dir` can remove an unrelated directory | It needs a skill whose name collides with something in that directory |

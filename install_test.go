@@ -663,7 +663,6 @@ func TestRunAliasesMatchTheirCommands(t *testing.T) {
 func TestRunInstallsAtUserScope(t *testing.T) {
 	home := t.TempDir()
 	testenv.SetHome(t, home)
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	ctx := t.Context()
 	out := &bytes.Buffer{}
@@ -933,7 +932,6 @@ func TestWithDefaultAgentsReplacesDetection(t *testing.T) {
 func TestWithDefaultScopeChangesWhereSkillsLand(t *testing.T) {
 	home := t.TempDir()
 	testenv.SetHome(t, home)
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	in, root := newInstaller(t,
 		skillembed.WithDefaultScope(skillembed.ScopeUser),
@@ -1913,13 +1911,11 @@ func copyTree(t *testing.T, from, to string) {
 }
 
 // skipWithoutExecutableBits skips a test that reads a mode back off the disk.
-//
-// Windows has no executable bit: os.Stat builds a regular file's mode from the
-// read-only attribute, so a chmod here says nothing and the installed copy is
-// judged by its digest alone.
+// Windows has none to read, so a chmod there says nothing. modesMatter in
+// internal/skillfs is the same rule, unexported.
 func skipWithoutExecutableBits(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("the file system carries no executable bit")
+		t.Skip("the platform carries no executable bit")
 	}
 }

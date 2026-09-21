@@ -1,20 +1,27 @@
 name: CI
 
 on:
-  push: {}
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
 permissions:
   contents: read
 
+# A push to a pull request branch reaches this workflow once, through
+# pull_request. Without the branch filter above it arrived twice, and the
+# matrix made that six jobs rather than two. A superseded run is cancelled,
+# since only the head of a branch is being asked about.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ===========================================================================
-  # Three platforms, because this library is file system work and the parts
-  # that differ by platform are the parts it is made of: the two-rename swap,
-  # the executable bit, symbolic links, the path list separator. Every one of
-  # them carried a comment about its platform behaviour that only Linux had
-  # ever run.
+  # Three platforms. This library is file system work, and the parts that
+  # differ by platform are the parts it is made of: the two-rename swap, the
+  # executable bit, symbolic links, the path list separator.
   #
   # fail-fast is off. A failure on one platform is the interesting case, and
   # the answer is usually whether the other two agree with it.
@@ -40,8 +47,8 @@ jobs:
       # failed build reports zero declscope diagnostics and reads as a clean
       # run, so the script builds before it reads any count.
       #
-      # The Windows runner's default shell is PowerShell, and bash is what the
-      # script is written in.
+      # The Windows runner's default shell is PowerShell. The script is written
+      # in bash.
       - name: Run the checks
         shell: bash
         run: ./test_all.sh
