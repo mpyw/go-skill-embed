@@ -1,6 +1,7 @@
 # go-skill-embed
 
 [![CI](https://github.com/mpyw/go-skill-embed/actions/workflows/ci.yml/badge.svg)](https://github.com/mpyw/go-skill-embed/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/mpyw/go-skill-embed/graph/badge.svg)](https://codecov.io/gh/mpyw/go-skill-embed)
 
 | Module | Reference |
 | --- | --- |

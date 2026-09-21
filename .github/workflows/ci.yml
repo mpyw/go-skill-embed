@@ -55,9 +55,25 @@ jobs:
 
   # One platform is enough: the report is about which lines run, and that is
   # the same question everywhere.
+  #
+  # The adapters are modules of their own, so `go test ./...` at the root never
+  # enters them. Each module is measured on its own and the four profiles go up
+  # as one report: the split is about the module graph a consumer inherits, not
+  # about four separate libraries. The example module is left out of both, and
+  # of codecov.yml, since it is documentation and covers nothing.
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+
+    # id-token: write is what lets the Codecov upload authenticate as this
+    # workflow run instead of with a stored token. Nothing else in the job
+    # needs it, and the workflow-wide contents: read has to be restated
+    # alongside it, since a job's permissions replace the default rather than
+    # add to it.
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v2
@@ -65,13 +81,23 @@ jobs:
           cache: true
 
       - name: Run tests with coverage
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic -coverpkg=./... ./...
+        run: |
+          for dir in . skillcobra skillurfavev2 skillurfavev3; do
+            echo "--- $dir"
+            ( cd "$dir" && go test -race -coverprofile=coverage.txt -covermode=atomic -coverpkg=./... ./... )
+          done
 
+      # OIDC rather than a CODECOV_TOKEN secret: the repository is public, so
+      # there is nothing a token would protect that the run's own identity does
+      # not, and one less secret to rotate. A pull request from a fork reaches
+      # neither, and uploads without either one.
+      #
+      # continue-on-error: Codecov being unreachable is not a reason to fail a
+      # pull request. The check job is what says whether the code is good.
       - uses: codecov/codecov-action@v7
         with:
-          files: ./coverage.txt
+          files: ./coverage.txt,./skillcobra/coverage.txt,./skillurfavev2/coverage.txt,./skillurfavev3/coverage.txt
           flags: unittests
           name: codecov
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
         continue-on-error: true
