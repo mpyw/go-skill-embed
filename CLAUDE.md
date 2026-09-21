@@ -269,7 +269,7 @@ setup.
 
 | | |
 | --- | --- |
-| `.gitattributes` | A Windows runner's `core.autocrlf` rewrites the working tree, and a shebang line ending in a carriage return is not a shebang. The `// Output:` comments were the other reason given and were not one: `go/ast` strips a trailing carriage return before an example is compared, and a checkout converted to CRLF passes every test. A skill tree is exempted with `-text`, because git normalizing one silently changes a digest |
+| `.gitattributes` | Git for Windows installs with `core.autocrlf=true`, and a shebang line ending in a carriage return is not a shebang. A skill tree is exempted with `-text`, because git normalizing one silently changes a digest |
 | `testenv.SetHome` | `os.UserHomeDir` reads `USERPROFILE` on Windows. A test setting `HOME` alone passes on Linux and reaches the developer's real home directory on Windows, which is where a user scope install would land. It clears `CLAUDE_CONFIG_DIR` too, which overrides the home-derived path outright: with that set, three adapter tests failed |
 | `testenv.RequireSymlink` | Windows gates a symbolic link behind a privilege an account may or may not hold, so the helper asks by making one. A refusal reaches stderr as well as the test, because `go test` prints a skip only under `-v` and a run that quietly dropped every symbolic link test reads exactly like one that passed them |
 | `checkdocs.py` | `go build -o /dev/null`, a `replace` path spelled with backslashes and unquoted, and the locale's encoding. None of them is about the documents |
@@ -302,6 +302,17 @@ did not. `filepath.Rel` answers with an error across two volumes and `Within`
 reads that as outside, and every other test took both paths from one root. The
 runner hands over two volumes for free: the workspace is on `D:` and
 `t.TempDir()` is on `C:`.
+
+Two of the reasons first given for `.gitattributes` did not survive being
+measured, and both are recorded because the file is easy to read as doing more
+than it does. The `// Output:` comments were said to need it: they do not,
+because `go/ast` strips a trailing carriage return before an example is
+compared, and a checkout converted to CRLF passes every test. CI was said to
+need it: it does not. rust-skill-embed runs the same three-platform matrix over
+a bash `test_all.sh` with no `.gitattributes` at all, and its Windows job is
+green, so the runner is not rewriting anything. What is left is a Windows
+contributor's own clone, where `core.autocrlf` is on by default. Measured
+there: `env: bash\r: No such file or directory`.
 
 **Rejected: letting `RequireSymlink` skip on CI as it does locally.**
 `go test` prints a skip only under `-v`, and `internal/projectroot`'s line is

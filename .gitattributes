@@ -1,9 +1,10 @@
 # Checked out with LF on every platform.
 #
-# Git's autocrlf default on a Windows runner rewrites the working tree, and
-# test_all.sh does not survive it: a shebang line ending in a carriage return
-# is not a shebang. An `// Output:` comment does survive, because go/ast strips
-# a trailing carriage return before an example is compared.
+# This is for a clone on a Windows machine, not for CI. Git for Windows
+# installs with core.autocrlf=true, and test_all.sh does not survive the
+# rewrite: a shebang line ending in a carriage return is not a shebang, and
+# bash answers "env: bash\r: No such file or directory". A GitHub runner
+# leaves the tree alone, so nothing here would have failed there.
 * text=auto eol=lf
 
 # A skill tree is hashed, so git does not get to decide its bytes. Normalizing
