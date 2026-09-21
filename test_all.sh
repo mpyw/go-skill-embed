@@ -73,8 +73,21 @@ run_test "declscope" \
 
 # A Go block in a document is hand written, so it drifts when a signature
 # changes and nothing says so.
+#
+# The interpreter is run rather than looked up. The Windows runner has python
+# and no python3, and a python.org install puts an app execution alias at
+# python3 that prints "Python was not found" and exits, so a name that
+# resolves is not a name that works. The fallback names python3, so a machine
+# with none of them reports the name this script asks for.
+python=python3
+for candidate in python3 python py; do
+    if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
+        python=$candidate
+        break
+    fi
+done
 run_test "checkdocs" \
-    python3 scripts/checkdocs.py
+    "$python" scripts/checkdocs.py
 
 echo ""
 echo "===== Summary ====="

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	skillembed "github.com/mpyw/go-skill-embed"
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 )
 
 //go:embed testdata/skills
@@ -34,8 +35,7 @@ func TestBuiltInAgents(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	testenv.SetHome(t, home)
 
 	for i, a := range got {
 		w := want[i]
@@ -153,7 +153,7 @@ func TestAgentUserDirNeedsAHomeDirectory(t *testing.T) {
 // the whole value would produce one directory with a separator in its name.
 func TestAgentClaudeConfigDirTakesTheFirstRoot(t *testing.T) {
 	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 
 	for _, c := range []struct {
 		name  string

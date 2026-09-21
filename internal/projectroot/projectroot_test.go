@@ -4,8 +4,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 )
 
 // The walk decides where a project install lands. Without it, running from a
@@ -60,7 +63,7 @@ func TestFind(t *testing.T) {
 	// uses. Landing there turns a project install into a user-wide one.
 	t.Run("the home directory is refused", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testenv.SetHome(t, home)
 		mkdir(t, filepath.Join(home, ".claude"))
 
 		if _, err := Find(home, markers); !errors.Is(err, ErrIsHome) {
@@ -71,7 +74,7 @@ func TestFind(t *testing.T) {
 	// A repository whose root is the home directory reaches the same answer.
 	t.Run("a repository at home is refused too", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testenv.SetHome(t, home)
 		mkdir(t, filepath.Join(home, ".git"))
 		under := filepath.Join(home, "notes")
 		mkdir(t, under)
@@ -227,8 +230,39 @@ func TestWithin(t *testing.T) {
 	})
 }
 
+// filepath.Rel answers with an error when the two paths are on different
+// volumes, and Within reads that as outside. Nothing but Windows has a second
+// volume, and a Windows machine may have only one, so the test goes looking
+// for one rather than naming a letter.
+func TestWithinAcrossVolumes(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("one volume")
+	}
+	root := t.TempDir()
+
+	var other string
+	for letter := 'A'; letter <= 'Z' && other == ""; letter++ {
+		volume := string(letter) + ":"
+		if strings.EqualFold(volume, filepath.VolumeName(root)) {
+			continue
+		}
+		if _, err := os.Stat(volume + string(filepath.Separator)); err == nil {
+			other = volume + string(filepath.Separator)
+		}
+	}
+	if other == "" {
+		t.Skip("this machine has one volume")
+	}
+
+	err := Within(root, filepath.Join(other, "skills"))
+	if !errors.Is(err, ErrOutsideRoot) {
+		t.Errorf("Within = %v, want ErrOutsideRoot", err)
+	}
+}
+
 func symlink(t *testing.T, target, link string) {
 	t.Helper()
+	testenv.RequireSymlink(t)
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}

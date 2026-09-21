@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -69,7 +70,10 @@ func TestWriteRestoresTheExecutableBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if script.Mode().Perm()&0o111 == 0 {
+	// Where the platform carries no executable bit there is none to set, and
+	// the mode os.Stat reports is the read-only attribute rather than anything
+	// Write chose.
+	if modesMatter && script.Mode().Perm()&0o111 == 0 {
 		t.Errorf("scripts/run.sh mode = %v, want the executable bit set", script.Mode().Perm())
 	}
 
@@ -287,20 +291,26 @@ func TestExecutableBitsMatch(t *testing.T) {
 		t.Error("a nil rule reported a mismatch")
 	}
 
-	script := filepath.Join(dest, "scripts", "run.sh")
-	if err := os.Chmod(script, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if match(t, HasShebang) {
-		t.Error("a script that lost its executable bit went unnoticed")
-	}
-	if err := os.Chmod(script, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// What follows is a mode on the disk disagreeing with the rule, which is a
+	// thing only a platform carrying the bit can arrange. On the other one the
+	// two assertions above are the whole of the contract, and
+	// TestExecutableBitsMatchWithoutModes states the rest of it.
+	if modesMatter {
+		script := filepath.Join(dest, "scripts", "run.sh")
+		if err := os.Chmod(script, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if match(t, HasShebang) {
+			t.Error("a script that lost its executable bit went unnoticed")
+		}
+		if err := os.Chmod(script, 0o755); err != nil {
+			t.Fatal(err)
+		}
 
-	// A bit the rule never asked for is a mismatch in the other direction.
-	if match(t, func(name string, _ []byte) bool { return name == "reference/tips.md" }) {
-		t.Error("a file carrying a bit the rule does not want went unnoticed")
+		// A bit the rule never asked for is a mismatch in the other direction.
+		if match(t, func(name string, _ []byte) bool { return name == "reference/tips.md" }) {
+			t.Error("a file carrying a bit the rule does not want went unnoticed")
+		}
 	}
 
 	// Junk is skipped here as everywhere else, so an executable .DS_Store
@@ -316,6 +326,13 @@ func TestExecutableBitsMatch(t *testing.T) {
 // Once dest holds the new tree the write has succeeded. Removing the directory
 // that was moved aside is cleanup, and a failure there is not a failed install.
 func TestWriteSucceedsWhenTheAsideTreeCannotBeRemoved(t *testing.T) {
+	// The directory is made unremovable with a mode. On Windows os.Chmod sets
+	// the read-only attribute, which does not stop a child being unlinked and
+	// which os.RemoveAll clears on its own, so the path this test is for is
+	// never entered and it would pass without reaching anything.
+	if runtime.GOOS == "windows" {
+		t.Skip("a mode cannot make a directory unremovable here")
+	}
 	root := t.TempDir()
 	// The locked directory is renamed aside during the write, so it has to be
 	// found again by walking rather than by the name it started under.
@@ -352,6 +369,29 @@ func TestWriteSucceedsWhenTheAsideTreeCannotBeRemoved(t *testing.T) {
 	}
 }
 
+// Where the platform has no executable bit, every tree matches whatever the
+// rule says and the digest decides alone. Without that, a skill holding a
+// shebang file could never read as up-to-date on Windows: list said outdated
+// on every run and install rewrote it every time.
+func TestExecutableBitsMatchWithoutModes(t *testing.T) {
+	if modesMatter {
+		t.Skip("the platform carries an executable bit, so the rule is compared against it")
+	}
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := Write(t.Context(), demoFS(), dest, WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A rule that disagrees with the tree in both directions at once. On a
+	// platform carrying the bit this is two mismatches.
+	upsideDown := func(name string, data []byte) bool { return !HasShebang(name, data) }
+	for _, rule := range []func(string, []byte) bool{nil, HasShebang, upsideDown} {
+		if ok, err := ExecutableBitsMatch(os.DirFS(dest), rule); err != nil || !ok {
+			t.Errorf("ExecutableBitsMatch = %v, %v; want true, nil", ok, err)
+		}
+	}
+}
+
 // Write falls back to the shebang rule when no rule is given, so the check that
 // decides whether an installed copy still matches has to fall back to it too.
 func TestExecutableBitsMatchFallsBackTheSameWay(t *testing.T) {
@@ -361,6 +401,9 @@ func TestExecutableBitsMatchFallsBackTheSameWay(t *testing.T) {
 	}
 	if ok, err := ExecutableBitsMatch(os.DirFS(dest), nil); err != nil || !ok {
 		t.Fatalf("a fresh install does not match: ok=%v err=%v", ok, err)
+	}
+	if !modesMatter {
+		return
 	}
 	if err := os.Chmod(filepath.Join(dest, "scripts", "run.sh"), 0o644); err != nil {
 		t.Fatal(err)

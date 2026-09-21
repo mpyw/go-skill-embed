@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 )
 
 // Naming a directory outright skips the search, and user scope never consults
@@ -77,7 +79,7 @@ func projectResolve(t *testing.T, dir string) string {
 // refactor once left this one saying neither.
 func TestProjectIsHomeErrorIsActionable(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	projectMkdir(t, filepath.Join(home, ".claude"))
 	t.Chdir(home)
 

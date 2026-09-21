@@ -13,6 +13,7 @@ shape cannot slip through unchecked.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import shutil
@@ -22,6 +23,10 @@ import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 DOCUMENTS = ["README.md", "skills/go-skill-embed-adoption/SKILL.md"]
+
+# Every read and write is UTF-8. The documents are, a block carries whatever
+# they carry, and Windows would otherwise use the locale's encoding.
+UTF8 = {"encoding": "utf-8"}
 
 FENCE = re.compile(r"^```go\n(.*?)^```", re.M | re.S)
 
@@ -89,24 +94,56 @@ var skills = skillembed.NewInstaller(skillembed.MustSkillsFromFS(auxFS, "skills"
 DECLARED = re.compile(r"^\s*([\w, ]+?)\s*:=", re.M)
 
 
+def go_binary() -> str:
+    """The real go, resolved from inside the repository.
+
+    mise puts a shim on the PATH, and the shim reads the pinned version from
+    the working directory upwards. The scaffold is built in a temporary
+    directory, where there is no mise.toml and the shim has nothing to resolve.
+
+    Falling back to the bare name would put that shim back, and it fails with
+    "No version is set for shim: go", which says nothing about this. The
+    failure is reported here instead.
+    """
+    try:
+        done = subprocess.run(["go", "env", "GOROOT"], cwd=REPO, capture_output=True, text=True)
+    except OSError as err:
+        sys.exit(f"checkdocs: cannot run go: {err}")
+    root = done.stdout.strip()
+    if done.returncode != 0 or not root:
+        sys.exit(f"checkdocs: cannot resolve GOROOT\n{done.stderr}")
+    binary = pathlib.Path(root) / "bin" / ("go.exe" if os.name == "nt" else "go")
+    if not binary.is_file():
+        sys.exit(f"checkdocs: {binary} is not there")
+    return str(binary)
+
+
+GO = go_binary()
+
+
 def blocks(document: str) -> list[tuple[int, str]]:
-    text = (REPO / document).read_text()
+    text = (REPO / document).read_text(**UTF8)
     return [(i, m.group(1)) for i, m in enumerate(FENCE.finditer(text), 1)]
 
 
 def scaffold(tmp: pathlib.Path) -> None:
+    # Forward slashes, which go.mod takes on every platform, and quoted,
+    # because it splits an unquoted path on the first space. A Windows clone
+    # lives under C:/Users/First Last often enough.
+    repo = REPO.as_posix()
     (tmp / "go.mod").write_text(
         "module checkdocs\n\ngo 1.24\n\n"
-        f"replace github.com/mpyw/go-skill-embed => {REPO}\n"
-        f"replace github.com/mpyw/go-skill-embed/skillcobra => {REPO}/skillcobra\n"
-        f"replace github.com/mpyw/go-skill-embed/skillurfavev2 => {REPO}/skillurfavev2\n"
-        f"replace github.com/mpyw/go-skill-embed/skillurfavev3 => {REPO}/skillurfavev3\n"
+        f'replace github.com/mpyw/go-skill-embed => "{repo}"\n'
+        f'replace github.com/mpyw/go-skill-embed/skillcobra => "{repo}/skillcobra"\n'
+        f'replace github.com/mpyw/go-skill-embed/skillurfavev2 => "{repo}/skillurfavev2"\n'
+        f'replace github.com/mpyw/go-skill-embed/skillurfavev3 => "{repo}/skillurfavev3"\n',
+        **UTF8,
     )
     (tmp / "deps").mkdir()
-    (tmp / "deps" / "deps.go").write_text(DEPS)
+    (tmp / "deps" / "deps.go").write_text(DEPS, **UTF8)
     (tmp / "block" / "skills" / "demo").mkdir(parents=True)
-    (tmp / "block" / "skills" / "demo" / "SKILL.md").write_text("---\nname: demo\n---\n")
-    done = subprocess.run(["go", "mod", "tidy"], cwd=tmp, capture_output=True, text=True)
+    (tmp / "block" / "skills" / "demo" / "SKILL.md").write_text("---\nname: demo\n---\n", **UTF8)
+    done = subprocess.run([GO, "mod", "tidy"], cwd=tmp, capture_output=True, text=True)
     if done.returncode != 0:
         sys.exit(f"checkdocs: cannot resolve the modules\n{done.stderr}")
 
@@ -144,8 +181,10 @@ def check(tmp: pathlib.Path, document: str, index: int, block: str) -> bool:
         return False
 
     path = tmp / "block" / "check.go"
-    path.write_text(source)
-    done = subprocess.run(["go", "build", "-o", "/dev/null", "./block"], cwd=tmp, capture_output=True, text=True)
+    path.write_text(source, **UTF8)
+    # os.devnull is NUL on Windows and /dev/null elsewhere. The build output is
+    # discarded either way.
+    done = subprocess.run([GO, "build", "-o", os.devnull, "./block"], cwd=tmp, capture_output=True, text=True)
     path.unlink()
     if done.returncode != 0:
         print(f"FAIL {where}\n{block}\n{done.stderr}", file=sys.stderr)

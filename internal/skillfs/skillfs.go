@@ -81,7 +81,13 @@ func Digest(fsys fs.FS) (string, error) {
 // two sides of a comparison never agree on one. The rule reads the contents
 // instead. The digest has already matched those contents, so both sides reach
 // the same answer.
+//
+// Where the platform carries no executable bit there is nothing to compare the
+// rule against, so every tree matches and the digest decides alone.
 func ExecutableBitsMatch(fsys fs.FS, rule func(name string, data []byte) bool) (bool, error) {
+	if !modesMatter {
+		return true, nil
+	}
 	if rule == nil {
 		rule = HasShebang
 	}

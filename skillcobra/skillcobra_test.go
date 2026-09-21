@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	skillembed "github.com/mpyw/go-skill-embed"
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 	"github.com/mpyw/go-skill-embed/skillcobra"
 )
 
@@ -90,7 +91,7 @@ func ExampleCommand() {
 func TestCommandAgentAndScope(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 
 	fresh := func() (*cobra.Command, *bytes.Buffer) {
 		in := skillembed.NewInstaller(

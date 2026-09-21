@@ -1,0 +1,13 @@
+# Checked out with LF on every platform.
+#
+# Git's autocrlf default on a Windows runner rewrites the working tree, and
+# test_all.sh does not survive it: a shebang line ending in a carriage return
+# is not a shebang. An `// Output:` comment does survive, because go/ast strips
+# a trailing carriage return before an example is compared.
+* text=auto eol=lf
+
+# A skill tree is hashed, so git does not get to decide its bytes. Normalizing
+# one silently changes a digest, and a fixture that wants a carriage return
+# should keep it. Nothing in them has one today.
+**/skills/** -text
+**/testdata/** -text
