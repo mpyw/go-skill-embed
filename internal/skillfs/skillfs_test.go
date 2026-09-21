@@ -287,20 +287,26 @@ func TestExecutableBitsMatch(t *testing.T) {
 		t.Error("a nil rule reported a mismatch")
 	}
 
+	// Where there is no executable bit the check has nothing to compare and
+	// answers true, so both mismatches below are only mismatches on a file
+	// system that carries one.
+	noticed := modesMatter
+
 	script := filepath.Join(dest, "scripts", "run.sh")
 	if err := os.Chmod(script, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if match(t, HasShebang) {
-		t.Error("a script that lost its executable bit went unnoticed")
+	if got := match(t, HasShebang); got == noticed {
+		t.Errorf("a script that lost its executable bit: matched=%v, want %v", got, !noticed)
 	}
 	if err := os.Chmod(script, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	// A bit the rule never asked for is a mismatch in the other direction.
-	if match(t, func(name string, _ []byte) bool { return name == "reference/tips.md" }) {
-		t.Error("a file carrying a bit the rule does not want went unnoticed")
+	wanted := func(name string, _ []byte) bool { return name == "reference/tips.md" }
+	if got := match(t, wanted); got == noticed {
+		t.Errorf("a file carrying a bit the rule does not want: matched=%v, want %v", got, !noticed)
 	}
 
 	// Junk is skipped here as everywhere else, so an executable .DS_Store
@@ -365,8 +371,8 @@ func TestExecutableBitsMatchFallsBackTheSameWay(t *testing.T) {
 	if err := os.Chmod(filepath.Join(dest, "scripts", "run.sh"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := ExecutableBitsMatch(os.DirFS(dest), nil); err != nil || ok {
-		t.Errorf("a lost executable bit went unnoticed: ok=%v err=%v", ok, err)
+	if ok, err := ExecutableBitsMatch(os.DirFS(dest), nil); err != nil || ok == modesMatter {
+		t.Errorf("a lost executable bit: ok=%v err=%v, want ok=%v", ok, err, !modesMatter)
 	}
 }
 

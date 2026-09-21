@@ -56,6 +56,24 @@ digest has already matched, so both sides reach the same answer. A lost
 executable bit reads as `outdated` rather than `modified`, because the user did
 not do it and repairing it should not need `--force`.
 
+**Comparing the rule against a mode on a file system that has no modes.**
+Windows builds a regular file's mode from the read-only attribute alone, so
+`Mode()&0o111` is zero for every file and `HasShebang` returning true could
+never agree with it. A skill holding a shebang file read as `outdated` on every
+run, `install` rewrote it every time, and `--dry-run` reported an update that
+was not one. `modesMatter` is a build-tagged constant and
+`ExecutableBitsMatch` answers true at once where it is false, which leaves the
+digest to decide alone. Found by a reader porting the library to Rust, in
+issue #7, and covered by `ExampleInstaller_Status`: the demo skill's
+`scripts/run.sh` has a shebang, so the example prints `outdated` on Windows
+without the fix.
+
+The two files carry `//declscope:namespace skillfs`. A build tag cannot apply
+to part of a file, so the constant has to live in one of its own, and
+`qualify: ondemand` asks for a namespace in every name in the package the
+moment a second one appears. The directive says what is true: the constant is
+`skillfs.go`'s.
+
 ### Installing
 
 **Removing the destination before renaming the staging directory in.** The
@@ -222,6 +240,37 @@ reads carry a `//declscope:package` instead, which says the same
 thing in the source and costs nothing outside the module. `CommandName`,
 `ToolName`, `DefaultScope` and `AgentChoices` stay exported, because an adapter
 in another module really does need them.
+
+### Platforms
+
+**Linux alone in CI.** Every platform dependent line in this repository
+carried a comment about its platform behaviour and had never been run anywhere
+but Linux: the two-rename swap, the executable bit, `filepath.EvalSymlinks`,
+`filepath.Rel` across volumes, `filepath.ListSeparator`. The `check` job is a
+three-platform matrix now, with `fail-fast` off, because a failure on one
+platform is the interesting case and the answer is usually whether the other
+two agree. `coverage` stays on Linux: which lines run is the same question
+everywhere.
+
+Four things had to change before the matrix could find anything of its own.
+
+| | |
+| --- | --- |
+| `.gitattributes` | A Windows runner's `core.autocrlf` rewrites the working tree. A shell script's shebang line then ends in a carriage return, and an `// Output:` comment is compared against output the test produced with LF |
+| `testenv.SetHome` | `os.UserHomeDir` reads `USERPROFILE` on Windows. A test setting `HOME` alone passes on Linux and reaches the developer's real home directory on Windows, which is where a user scope install would land |
+| `testenv.RequireSymlink` | Windows grants the privilege to an administrator or to a machine in developer mode. That belongs to the account, not to the platform, so the helper asks by making one |
+| `checkdocs.py` | `go build -o /dev/null`, a `replace` path spelled with backslashes, and `read_text` in the locale's encoding. None of the three is about the documents |
+
+`skipWithoutExecutableBits` in `install_test.go` spells the platform out with
+`runtime.GOOS`, rather than reading `skillfs.modesMatter`. The constant is
+unexported and the test is in another package, and exporting it to reach it
+would be a promise made for a test.
+
+**Running `test_all.sh` only on Linux and the tests alone elsewhere.** It
+would have kept `checkdocs` off Windows for the cost of one flag, and it also
+keeps golangci-lint and declscope off the Windows build, which is where the
+platform stubs are. The three `checkdocs.py` fixes were smaller than the flag, and
+none of them made the script worse.
 
 ## Things that look wrong but are not
 

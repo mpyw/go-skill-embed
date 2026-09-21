@@ -73,8 +73,13 @@ run_test "declscope" \
 
 # A Go block in a document is hand written, so it drifts when a signature
 # changes and nothing says so.
+#
+# A Windows runner's bash sees no python3 on the PATH, only python, and that
+# one is a Python 3. The fallback names python3 so a machine with neither
+# reports the name this script asks for.
+python=$(command -v python3 || command -v python || echo python3)
 run_test "checkdocs" \
-    python3 scripts/checkdocs.py
+    "$python" scripts/checkdocs.py
 
 echo ""
 echo "===== Summary ====="

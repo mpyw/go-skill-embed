@@ -14,6 +14,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	skillembed "github.com/mpyw/go-skill-embed"
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 	"github.com/mpyw/go-skill-embed/skillurfavev3"
 )
 
@@ -92,7 +93,7 @@ func ExampleCommand() {
 func TestCommandAgentAndScope(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 
 	fresh := func() (*cli.Command, *bytes.Buffer) {
 		in := skillembed.NewInstaller(

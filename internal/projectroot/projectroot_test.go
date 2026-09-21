@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 )
 
 // The walk decides where a project install lands. Without it, running from a
@@ -60,7 +62,7 @@ func TestFind(t *testing.T) {
 	// uses. Landing there turns a project install into a user-wide one.
 	t.Run("the home directory is refused", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testenv.SetHome(t, home)
 		mkdir(t, filepath.Join(home, ".claude"))
 
 		if _, err := Find(home, markers); !errors.Is(err, ErrIsHome) {
@@ -71,7 +73,7 @@ func TestFind(t *testing.T) {
 	// A repository whose root is the home directory reaches the same answer.
 	t.Run("a repository at home is refused too", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		testenv.SetHome(t, home)
 		mkdir(t, filepath.Join(home, ".git"))
 		under := filepath.Join(home, "notes")
 		mkdir(t, under)
@@ -229,6 +231,7 @@ func TestWithin(t *testing.T) {
 
 func symlink(t *testing.T, target, link string) {
 	t.Helper()
+	testenv.RequireSymlink(t)
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}

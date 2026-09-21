@@ -423,6 +423,8 @@ app := &cli.Command{
 > A script installed without repair cannot be run by the agent.
 > The default marks any file starting with `#!` as executable.
 > Pass `WithExecutable` when your scripts have no shebang.
+> Windows has no executable bit, so nothing is set and nothing is checked
+> there, and an installed skill is judged by its contents alone.
 
 ## Using it as a library
 

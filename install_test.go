@@ -8,12 +8,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	skillembed "github.com/mpyw/go-skill-embed"
+	"github.com/mpyw/go-skill-embed/internal/testenv"
 )
 
 //go:embed testdata/skills
@@ -420,6 +422,7 @@ func TestInstallReportsBlockedAndWritesTheRest(t *testing.T) {
 // a user dropped in, used to fail Status and with it Install and Uninstall for
 // every skill at that target, --force included. The only way out was rm -rf.
 func TestUnreadableInstallStaysRepairable(t *testing.T) {
+	testenv.RequireSymlink(t)
 	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
@@ -501,6 +504,7 @@ func TestErrorsAreMatchable(t *testing.T) {
 // A script that loses its executable bit cannot be run by the agent. Nobody
 // edited it, so repairing it must not need --force.
 func TestLostExecutableBitIsRepaired(t *testing.T) {
+	skipWithoutExecutableBits(t)
 	ctx := t.Context()
 	in, root := newInstaller(t)
 	dest := filepath.Join(root, "skills")
@@ -658,7 +662,7 @@ func TestRunAliasesMatchTheirCommands(t *testing.T) {
 // developer's real ~/.claude even if the code does the wrong thing.
 func TestRunInstallsAtUserScope(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	ctx := t.Context()
@@ -744,6 +748,7 @@ func TestInstallWithoutMetadataReadsAsForeign(t *testing.T) {
 // default rather than adding to it, which is visible in both directions, and
 // the same rule decides whether an installation is still intact.
 func TestInstallExecutableRuleDecidesTheMode(t *testing.T) {
+	skipWithoutExecutableBits(t)
 	fsys := fstest.MapFS{
 		"skills/demo/SKILL.md":       &fstest.MapFile{Data: []byte("---\nname: demo\n---\n\n# Demo\n")},
 		"skills/demo/bin/tool":       &fstest.MapFile{Data: []byte("a program with no shebang\n")},
@@ -927,7 +932,7 @@ func TestWithDefaultAgentsReplacesDetection(t *testing.T) {
 // temporary directory here, so a mistake cannot reach the real one.
 func TestWithDefaultScopeChangesWhereSkillsLand(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 
 	in, root := newInstaller(t,
@@ -1246,7 +1251,7 @@ func TestOutputNamesTheProjectRoot(t *testing.T) {
 		{Dir: filepath.Join(root, "skills")},
 		{Scope: skillembed.ScopeUser},
 	} {
-		t.Setenv("HOME", t.TempDir())
+		testenv.SetHome(t, t.TempDir())
 		statuses, err := in.Status(ctx, o)
 		if err != nil {
 			t.Fatal(err)
@@ -1377,6 +1382,7 @@ func TestAgentSelectorsSplitAndRepeat(t *testing.T) {
 // as mode 120000, so cloning a repository and running the tool once was the
 // whole of it.
 func TestProjectInstallStaysInsideTheProject(t *testing.T) {
+	testenv.RequireSymlink(t)
 	ctx := t.Context()
 	in, root := newInstaller(t)
 
@@ -1427,6 +1433,7 @@ func TestProjectInstallStaysInsideTheProject(t *testing.T) {
 // skills somewhere else in its own tree and links to them is doing nothing
 // wrong, and user scope is the user's own directory to move.
 func TestInstallFollowsLinksThatStayInReach(t *testing.T) {
+	testenv.RequireSymlink(t)
 	ctx := t.Context()
 	in, root := newInstaller(t)
 
@@ -1902,5 +1909,17 @@ func copyTree(t *testing.T, from, to string) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// skipWithoutExecutableBits skips a test that reads a mode back off the disk.
+//
+// Windows has no executable bit: os.Stat builds a regular file's mode from the
+// read-only attribute, so a chmod here says nothing and the installed copy is
+// judged by its digest alone.
+func skipWithoutExecutableBits(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the file system carries no executable bit")
 	}
 }

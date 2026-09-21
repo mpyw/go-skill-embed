@@ -13,6 +13,7 @@ shape cannot slip through unchecked.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import shutil
@@ -90,17 +91,22 @@ DECLARED = re.compile(r"^\s*([\w, ]+?)\s*:=", re.M)
 
 
 def blocks(document: str) -> list[tuple[int, str]]:
-    text = (REPO / document).read_text()
+    # Explicit, because Windows reads a file in the locale's encoding by
+    # default and these documents are UTF-8.
+    text = (REPO / document).read_text(encoding="utf-8")
     return [(i, m.group(1)) for i, m in enumerate(FENCE.finditer(text), 1)]
 
 
 def scaffold(tmp: pathlib.Path) -> None:
+    # A replace path is written with forward slashes, which go.mod takes on
+    # every platform. A Windows path spelled with backslashes does not parse.
+    repo = REPO.as_posix()
     (tmp / "go.mod").write_text(
         "module checkdocs\n\ngo 1.24\n\n"
-        f"replace github.com/mpyw/go-skill-embed => {REPO}\n"
-        f"replace github.com/mpyw/go-skill-embed/skillcobra => {REPO}/skillcobra\n"
-        f"replace github.com/mpyw/go-skill-embed/skillurfavev2 => {REPO}/skillurfavev2\n"
-        f"replace github.com/mpyw/go-skill-embed/skillurfavev3 => {REPO}/skillurfavev3\n"
+        f"replace github.com/mpyw/go-skill-embed => {repo}\n"
+        f"replace github.com/mpyw/go-skill-embed/skillcobra => {repo}/skillcobra\n"
+        f"replace github.com/mpyw/go-skill-embed/skillurfavev2 => {repo}/skillurfavev2\n"
+        f"replace github.com/mpyw/go-skill-embed/skillurfavev3 => {repo}/skillurfavev3\n"
     )
     (tmp / "deps").mkdir()
     (tmp / "deps" / "deps.go").write_text(DEPS)
@@ -145,7 +151,8 @@ def check(tmp: pathlib.Path, document: str, index: int, block: str) -> bool:
 
     path = tmp / "block" / "check.go"
     path.write_text(source)
-    done = subprocess.run(["go", "build", "-o", "/dev/null", "./block"], cwd=tmp, capture_output=True, text=True)
+    # os.devnull is NUL on Windows, which is the name go build recognises there.
+    done = subprocess.run(["go", "build", "-o", os.devnull, "./block"], cwd=tmp, capture_output=True, text=True)
     path.unlink()
     if done.returncode != 0:
         print(f"FAIL {where}\n{block}\n{done.stderr}", file=sys.stderr)

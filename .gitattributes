@@ -1,0 +1,7 @@
+# Checked out with LF on every platform.
+#
+# Git's autocrlf default on a Windows runner rewrites the working tree, and two
+# things in this repository do not survive it: a shell script whose shebang
+# line then ends in a carriage return, and the `// Output:` comment in an
+# example, which is compared against output the test itself produced with LF.
+* text=auto eol=lf
