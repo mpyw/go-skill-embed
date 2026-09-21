@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.27.1
 
 require (
-	github.com/mpyw/go-skill-embed v0.1.0
+	github.com/mpyw/go-skill-embed v0.2.1
 	golang.org/x/tools v0.50.0
 )
 

@@ -328,6 +328,16 @@ The `replace` directives in the adapter modules point at `../`. Go ignores a
 `replace` in a dependency, so consumers resolve the `require` line normally.
 They are there so the repository builds before a tag exists.
 
+That `require` line is the one thing in the repository nothing checks by
+building. The `replace` satisfies every local build and every CI job, so the
+version beside it can say anything. v0.2.0 shipped three adapters still asking
+for the core at v0.1.0, and it was invisible for exactly that reason.
+Measured: `go get github.com/mpyw/go-skill-embed/skillcobra@v0.2.0` into an
+empty module resolves `github.com/mpyw/go-skill-embed v0.1.0`, which compiles,
+and which has neither the project root guard nor the orphan sweep in it. The
+Tag workflow reads the line now and refuses a version the modules do not ask
+for, which also means the bump has to be committed before the tag is cut.
+
 **Writing the flag block out by hand to match `gh skill install`.** It printed
 `--agent` and `-f, --force`, which read well and were a lie. `-f` and `-force`
 are two flags on one variable, the `flag` package has no short and long forms,
