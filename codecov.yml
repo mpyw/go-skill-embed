@@ -1,0 +1,12 @@
+codecov:
+  require_ci_to_pass: true
+
+# The adapters are modules of their own so that embedding skills never drags
+# cobra or x/tools into a consumer's module graph. They are still one library,
+# so CI uploads every module's profile into a single report.
+#
+# The example driver is documentation: it is there to be read and built, and
+# `go test` over it covers nothing. Excluded so it does not drag the
+# denominator.
+ignore:
+  - "examples/"
