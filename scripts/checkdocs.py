@@ -90,6 +90,24 @@ var skills = skillembed.NewInstaller(skillembed.MustSkillsFromFS(auxFS, "skills"
 DECLARED = re.compile(r"^\s*([\w, ]+?)\s*:=", re.M)
 
 
+def go_binary() -> str:
+    """The real go, resolved from inside the repository.
+
+    mise puts a shim on the PATH, and the shim reads the pinned version from
+    the working directory upwards. The scaffold is built in a temporary
+    directory, where there is no mise.toml and the shim has nothing to resolve.
+    """
+    done = subprocess.run(["go", "env", "GOROOT"], cwd=REPO, capture_output=True, text=True)
+    if done.returncode == 0:
+        binary = pathlib.Path(done.stdout.strip()) / "bin" / ("go.exe" if os.name == "nt" else "go")
+        if binary.is_file():
+            return str(binary)
+    return "go"
+
+
+GO = go_binary()
+
+
 def blocks(document: str) -> list[tuple[int, str]]:
     # Explicit, because Windows reads a file in the locale's encoding by
     # default and these documents are UTF-8.
@@ -112,7 +130,7 @@ def scaffold(tmp: pathlib.Path) -> None:
     (tmp / "deps" / "deps.go").write_text(DEPS)
     (tmp / "block" / "skills" / "demo").mkdir(parents=True)
     (tmp / "block" / "skills" / "demo" / "SKILL.md").write_text("---\nname: demo\n---\n")
-    done = subprocess.run(["go", "mod", "tidy"], cwd=tmp, capture_output=True, text=True)
+    done = subprocess.run([GO, "mod", "tidy"], cwd=tmp, capture_output=True, text=True)
     if done.returncode != 0:
         sys.exit(f"checkdocs: cannot resolve the modules\n{done.stderr}")
 
@@ -152,7 +170,7 @@ def check(tmp: pathlib.Path, document: str, index: int, block: str) -> bool:
     path = tmp / "block" / "check.go"
     path.write_text(source)
     # os.devnull is NUL on Windows, which is the name go build recognises there.
-    done = subprocess.run(["go", "build", "-o", os.devnull, "./block"], cwd=tmp, capture_output=True, text=True)
+    done = subprocess.run([GO, "build", "-o", os.devnull, "./block"], cwd=tmp, capture_output=True, text=True)
     path.unlink()
     if done.returncode != 0:
         print(f"FAIL {where}\n{block}\n{done.stderr}", file=sys.stderr)

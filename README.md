@@ -491,6 +491,15 @@ at `qualify: ondemand` with `exported: true`. The settings are in
 `.declscope.yaml`, and its adoption skill is installed at
 `.claude/skills/declscope-adoption`.
 
+## Relation to rust-skill-embed
+
+[rust-skill-embed](https://github.com/mpyw/rust-skill-embed) is the same
+library for Rust. The two agree on what they write: the agent directories, the
+four frontmatter keys, and the digest. Under one tool name, an installation
+made by either reads as `up-to-date` to the other, and the two trees are
+identical apart from `x-embedded-at`. Its `tests/digest.rs` pins the digest to
+the value this library produces.
+
 ## License
 
 MIT
