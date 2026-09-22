@@ -1465,6 +1465,102 @@ func TestInstallFollowsLinksThatStayInReach(t *testing.T) {
 	}
 }
 
+// One directory reached by two agent paths, which is what a repository does
+// when it links .claude/skills at .agents/skills so that every agent reads one
+// tree. Targets merges destinations by path, and two spellings of one
+// directory are two of them, so each skill is written twice.
+//
+// The behaviour is pinned rather than merged. Both writes carry the same
+// bytes, so the second is a rewrite and nothing is lost, and the run after it
+// reads up to date at both. Merging by identity would print one destination
+// under whichever spelling the agent order reached first, which is
+// .agents/skills, and the path the reader linked would appear nowhere.
+func TestOneDirectoryReachedByTwoAgentPaths(t *testing.T) {
+	testenv.RequireSymlink(t)
+	ctx := t.Context()
+	in, root := newInstaller(t)
+
+	shared := filepath.Join(root, ".agents", "skills")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, ".claude", "skills")
+	if err := os.Symlink(shared, link); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := skillembed.InstallOptions{
+		Agents: []skillembed.AgentSelector{"all"},
+		Scope:  "project",
+		Names:  []string{"demo-skill"},
+	}
+	targets, err := in.Targets(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 || targets[0].Dir != shared || targets[1].Dir != link {
+		for _, tg := range targets {
+			t.Logf("target %s", tg.Label())
+		}
+		t.Fatalf("got %d targets, want .agents/skills and .claude/skills", len(targets))
+	}
+
+	results, err := in.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("install wrote %d rows, want one per destination: %+v", len(results), results)
+	}
+	for i, want := range []string{shared, link} {
+		if results[i].Action != skillembed.ActionInstalled {
+			t.Errorf("%s = %s, want %s", results[i].Path, results[i].Action, skillembed.ActionInstalled)
+		}
+		if results[i].Path != filepath.Join(want, "demo-skill") {
+			t.Errorf("row %d landed at %s, want it under %s", i, results[i].Path, want)
+		}
+	}
+
+	// Both rows are the same directory, and it holds one skill rather than two.
+	first, err := os.Stat(results[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.Stat(results[1].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(first, second) {
+		t.Errorf("%s and %s are different directories", results[0].Path, results[1].Path)
+	}
+	entries, err := os.ReadDir(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "demo-skill" {
+		t.Errorf("the shared directory holds %v, want demo-skill alone", entries)
+	}
+	if _, err := os.Stat(filepath.Join(shared, "demo-skill", skillembed.SkillFile)); err != nil {
+		t.Errorf("the second write did not leave a readable skill: %v", err)
+	}
+
+	// The rewrite is a rewrite: the run after it has nothing to do at either
+	// spelling, so the doubled row never becomes a doubled change.
+	results, err = in.Install(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if r.Before != skillembed.StateUpToDate || r.Action != skillembed.ActionSkipped {
+			t.Errorf("%s = %s/%s, want %s/%s", r.Path, r.Before, r.Action,
+				skillembed.StateUpToDate, skillembed.ActionSkipped)
+		}
+	}
+}
+
 // The bound is the project, and a destination can leave it without a symbolic
 // link: a custom Agent's ProjectDir is joined to the root and can climb out of
 // it. That is refused too, so the message must not blame a link that is not
