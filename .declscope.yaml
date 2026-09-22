@@ -2,8 +2,8 @@
 # unexported, so that a helper written for one file stays in that file.
 # https://github.com/mpyw/declscope
 #
-# boundary and surplus are on by default and are not restated here. Turning
-# either off would silence the rule the tool exists for.
+# boundary is on by default and is not restated here. Turning it off would
+# silence the rule the tool exists for. surplus is raised to strict below.
 rules:
   naming:
     # always | never | ondemand. ondemand asks for the namespace in the name
@@ -15,3 +15,7 @@ rules:
     # the namespace in the name. The few declarations where no natural word
     # order carries it state a `//declscope:ignore qualify` of their own.
     exported: true
+  # Judge each declaration a //declscope:package widens, not only the directive
+  # as a whole. One that no other namespace needs is narrowed with
+  # //declscope:private.
+  surplus: strict
