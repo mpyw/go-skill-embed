@@ -66,6 +66,14 @@ run_test "toolchain" \
 run_test "lint" \
     in_each_module golangci-lint run ./...
 
+# shrink runs before the analyzer: a declaration it unexports becomes private
+# to its file's namespace, and the analyzer then reports every other file that
+# uses it. It judges only internal/ packages, and only the root module has any.
+# Today the adapters' paths extend the root's, so it names every package as not
+# judged; it starts judging if that changes.
+run_test "shrink" \
+    declscope shrink ./...
+
 # A failed build reports zero declscope diagnostics and looks exactly like a
 # clean one, so the build runs first and the count is only read after it passes.
 run_test "declscope" \
