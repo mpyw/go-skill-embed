@@ -43,7 +43,9 @@ jobs:
         with:
           cache: true
 
-      # Tests, lint and declscope, across every module in the repository. A
+      # Tests, lint, declscope shrink (before the analyzer, since what it
+      # unexports the analyzer then judges) and declscope, across every module
+      # in the repository. A
       # failed build reports zero declscope diagnostics and reads as a clean
       # run, so the script builds before it reads any count.
       #
