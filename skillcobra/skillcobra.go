@@ -95,7 +95,7 @@ func (a agentsValue) String() string {
 func (agentsValue) Type() string { return "strings" }
 
 func (a agentsValue) Set(v string) error {
-	for _, name := range strings.Split(v, ",") {
+	for name := range strings.SplitSeq(v, ",") {
 		*a.dest = append(*a.dest, skillembed.AgentSelector(name))
 	}
 	return nil

@@ -7,6 +7,7 @@ package manifest
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 )
 
@@ -235,10 +236,5 @@ func isInjected(line []byte) bool {
 		return false
 	}
 	key = strings.TrimSpace(key)
-	for _, k := range InjectedKeys {
-		if key == k {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(InjectedKeys, key)
 }

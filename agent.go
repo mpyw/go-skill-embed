@@ -136,7 +136,7 @@ func agentsFallBackToAll(known, resolved []Agent, values []AgentSelector) []Agen
 		return resolved
 	}
 	for _, v := range values {
-		for _, name := range strings.Split(string(v), ",") {
+		for name := range strings.SplitSeq(string(v), ",") {
 			if strings.TrimSpace(name) == "detected" {
 				return known
 			}
@@ -179,7 +179,7 @@ func agentsByName(known []Agent, values []AgentSelector, detected func(Agent) bo
 	var out []Agent
 	seen := map[string]bool{}
 	for _, v := range values {
-		for _, name := range strings.Split(string(v), ",") {
+		for name := range strings.SplitSeq(string(v), ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
 				continue
