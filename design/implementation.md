@@ -1,6 +1,6 @@
-# Notes for agents working on this repository
+# Implementation notes
 
-Run `./test_all.sh` before claiming anything passes. It covers every module.
+The short, always-loaded instructions are in [AGENTS.md](../AGENTS.md). Run `./test_all.sh` before claiming anything passes. It covers every module.
 
 | Section | What it holds |
 | --- | --- |
@@ -15,7 +15,7 @@ Run `./test_all.sh` before claiming anything passes. It covers every module.
 | File | What belongs there |
 | --- | --- |
 | `README.md`, doc comments, source comments | The current state only. Brief |
-| `CLAUDE.md` | History and rationale, including rejected designs |
+| `design/implementation.md` | History and rationale, including rejected designs |
 
 A comment says why the code has its present shape, in the present tense. An
 account of a past bug belongs here instead. A comment that only restates the
