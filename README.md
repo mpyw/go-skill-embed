@@ -491,8 +491,8 @@ a new adapter needs no change to the workflows.
 
 Declaration scopes are enforced by [declscope](https://github.com/mpyw/declscope),
 at `qualify: ondemand` with `exported: true`. The settings are in
-`.declscope.yaml`, and its adoption skill is installed at
-`.claude/skills/declscope-adoption`.
+`.declscope.yaml`, and its skills are installed at
+`.claude/skills/declscope-authoring` and `.claude/skills/declscope-adoption`.
 
 ## Relation to rust-skill-embed
 
