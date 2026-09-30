@@ -9,8 +9,6 @@ import (
 // A description is cut for a listing. Counting bytes cuts a CJK description at
 // a third of the length, and in the middle of a character.
 func TestFirstLine(t *testing.T) {
-	const width = Width
-
 	long := strings.Repeat("これは非常に長い日本語の説明文です。", 10)
 	got := FirstLine(long)
 

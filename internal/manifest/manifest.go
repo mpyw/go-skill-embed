@@ -24,8 +24,8 @@ const (
 	KeyEmbeddedDigest  = "x-embedded-digest"
 )
 
-// InjectedKeys are the keys With writes and Strip removes.
-var InjectedKeys = []string{KeyEmbeddedBy, KeyEmbeddedVersion, KeyEmbeddedAt, KeyEmbeddedDigest}
+// injectedKeys are the keys With writes and strip removes.
+var injectedKeys = []string{KeyEmbeddedBy, KeyEmbeddedVersion, KeyEmbeddedAt, KeyEmbeddedDigest}
 
 // Entry is one key and value to inject.
 type Entry struct {
@@ -141,7 +141,7 @@ func quote(s string) string {
 // With returns src with the injected keys replaced by entries. A manifest
 // without frontmatter gains one.
 func With(src []byte, entries []Entry) []byte {
-	src = Strip(src)
+	src = strip(src)
 	b := locate(src)
 
 	var added bytes.Buffer
@@ -154,7 +154,7 @@ func With(src []byte, entries []Entry) []byte {
 
 	var out bytes.Buffer
 	if !b.found {
-		// No blank line after the closing delimiter. Strip has to restore the
+		// No blank line after the closing delimiter. strip has to restore the
 		// file byte for byte, and a line it did not write is a line it cannot
 		// know to remove.
 		out.WriteString("---\n")
@@ -176,13 +176,13 @@ func With(src []byte, entries []Entry) []byte {
 // skill: the injected keys removed, and a frontmatter block that holds nothing
 // else removed with them.
 //
-// That second step is why it is not just Strip. With writes a block when the
-// source had none, and Strip alone cannot tell that block from one the source
+// That second step is why it is not just strip. With writes a block when the
+// source had none, and strip alone cannot tell that block from one the source
 // already had. Removing an empty block on both sides makes the two spellings
 // of "no frontmatter" hash alike. A skill whose manifest carries an empty
 // block therefore reads as up-to-date once installed.
 func Normalize(src []byte) []byte {
-	src = Strip(src)
+	src = strip(src)
 	b := locate(src)
 	if !b.found || len(bytes.TrimSpace(src[b.start:b.end])) != 0 {
 		return src
@@ -193,9 +193,9 @@ func Normalize(src []byte) []byte {
 	return out.Bytes()
 }
 
-// Strip removes the injected keys and nothing else. With uses it so that
+// strip removes the injected keys and nothing else. With uses it so that
 // stamping twice does not accumulate duplicates.
-func Strip(src []byte) []byte {
+func strip(src []byte) []byte {
 	b := locate(src)
 	if !b.found {
 		return src
@@ -236,5 +236,5 @@ func isInjected(line []byte) bool {
 		return false
 	}
 	key = strings.TrimSpace(key)
-	return slices.Contains(InjectedKeys, key)
+	return slices.Contains(injectedKeys, key)
 }

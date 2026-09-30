@@ -22,10 +22,10 @@ func TrimLines(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// Width is how much of a description a listing shows, counted in runes.
-const Width = 100
+// width is how much of a description a listing shows, counted in runes.
+const width = 100
 
-// FirstLine shortens s to one line of at most Width runes.
+// FirstLine shortens s to one line of at most width runes.
 //
 // The count is in runes and the cut falls on a rune boundary. Bytes would cut
 // a CJK description at a third of the length, and in the middle of a
@@ -35,8 +35,8 @@ func FirstLine(s string) string {
 		s = s[:i]
 	}
 	s = strings.ReplaceAll(s, "\t", " ")
-	if utf8.RuneCountInString(s) > Width {
-		return string([]rune(s)[:Width-3]) + "..."
+	if utf8.RuneCountInString(s) > width {
+		return string([]rune(s)[:width-3]) + "..."
 	}
 	return s
 }
