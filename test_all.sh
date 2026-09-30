@@ -69,8 +69,8 @@ run_test "lint" \
 # shrink runs before the analyzer: a declaration it unexports becomes private
 # to its file's namespace, and the analyzer then reports every other file that
 # uses it. It judges only internal/ packages, and only the root module has any.
-# Today the adapters' paths extend the root's, so it names every package as not
-# judged; it starts judging if that changes.
+# The adapters' paths extend the root's, so it loads each adapter module as an
+# importer of the root's internal/.
 run_test "shrink" \
     declscope shrink ./...
 

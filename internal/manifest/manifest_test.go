@@ -57,8 +57,8 @@ func TestWithThenStripRoundTrips(t *testing.T) {
 		t.Errorf("%s appears %d times, want 1:\n%s", KeyEmbeddedBy, n, twice)
 	}
 
-	if got, want := string(Strip(twice)), withFrontmatter; got != want {
-		t.Errorf("Strip did not restore the original:\ngot:\n%s\nwant:\n%s", got, want)
+	if got, want := string(strip(twice)), withFrontmatter; got != want {
+		t.Errorf("strip did not restore the original:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -105,8 +105,8 @@ func TestStripLeavesNestedContentAlone(t *testing.T) {
 	if !strings.Contains(string(stamped), "  "+KeyEmbeddedDigest+": \"sha256:x\"") {
 		t.Errorf("the block scalar lost a line:\n%s", stamped)
 	}
-	if got, want := string(Strip(stamped)), src; got != want {
-		t.Errorf("Strip did not restore the original:\ngot:  %q\nwant: %q", got, want)
+	if got, want := string(strip(stamped)), src; got != want {
+		t.Errorf("strip did not restore the original:\ngot:  %q\nwant: %q", got, want)
 	}
 	// The real key is still the one that reads back.
 	if got := Fields(stamped)[KeyEmbeddedDigest]; got != "sha256:real" {
