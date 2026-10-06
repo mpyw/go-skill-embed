@@ -130,7 +130,7 @@ func (in *Installer) AgentChoices() string { return agentChoices(in.agents) }
 // machine with no agent directory any guess is as good as another, and writing
 // nothing would read as a failure.
 //
-//declscope:package // install.go applies it after resolving the agents
+//declscope:shared // install.go applies it after resolving the agents
 func agentsFallBackToAll(known, resolved []Agent, values []AgentSelector) []Agent {
 	if len(resolved) > 0 {
 		return resolved
@@ -167,7 +167,7 @@ var ErrNoAgentSelected = errors.New("skillembed: no agent selected")
 // whose directory already exists. It expands to all when that finds nothing,
 // so the command still does something on a machine with no agent set up.
 //
-//declscope:package // the command line's agent vocabulary, read by install.go
+//declscope:shared // the command line's agent vocabulary, read by install.go
 func agentsByName(known []Agent, values []AgentSelector, detected func(Agent) bool) ([]Agent, error) {
 	if len(values) == 0 {
 		return nil, nil

@@ -29,7 +29,7 @@ var ErrProjectEscapes = projectroot.ErrOutsideRoot
 // projectRootOf is what project scope resolves against. WithProjectRoot wins,
 // and without it the root is searched for.
 //
-//declscope:package // install.go asks for the root before asking an agent for its directory
+//declscope:shared // install.go asks for the root before asking an agent for its directory
 func (in *Installer) projectRootOf(scope Scope) (string, error) {
 	if scope != ScopeProject || in.projectRoot != "" {
 		return in.projectRoot, nil

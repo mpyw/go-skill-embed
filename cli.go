@@ -190,7 +190,7 @@ func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
 // newCLIFlagSet builds the FlagSet for one subcommand, already bound and
 // already knowing how to print itself.
 //
-//declscope:package // usage.go renders the flag block from the real FlagSet
+//declscope:shared // usage.go renders the flag block from the real FlagSet
 func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet {
 	fs := flag.NewFlagSet(in.CommandName()+" "+sub, flag.ContinueOnError)
 	// The flag package would print the complaint and then call Usage, and the

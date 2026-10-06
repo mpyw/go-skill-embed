@@ -67,7 +67,7 @@ func (in *Installer) usageHeadings(sub string) (summary, lines string) {
 // The long forms work as well, since the flag package accepts either. A tool
 // whose own flags print as -v should not print --agent next to them.
 //
-//declscope:package // cli.go installs it as each subcommand's flag.Usage
+//declscope:shared // cli.go installs it as each subcommand's flag.Usage
 func (in *Installer) usageFor(sub string, fs *flag.FlagSet) string {
 	summary, lines := in.usageHeadings(sub)
 

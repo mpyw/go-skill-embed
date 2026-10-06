@@ -226,13 +226,13 @@ are the `With*` options, and three are `Run`, `Intercept` and `ErrHelp`. Both
 groups are written by hand in a user's `main`, where a namespace in the name
 costs more than it explains. Nothing else is suppressed.
 
-**Declaring `modesMatter` shared with `//declscope:package`.** A build tag
+**Declaring `modesMatter` shared with `//declscope:shared`.** A build tag
 cannot apply to part of a file, so the constant lives in two files of its own,
 and each one is a namespace. Two rules fire on that: `skillfs.go` reaching the
 constant is a boundary crossing, and `qualify: ondemand` wakes up the moment a
 package holds a second namespace, which asks for `modesUnixModesMatter` and
 for a rename of every other name in the package as well. Measured:
-`//declscope:package` clears the first and leaves the second.
+`//declscope:shared` clears the first and leaves the second.
 `//declscope:namespace skillfs` clears both, and says what is true, which is
 that the constant is `skillfs.go`'s.
 
@@ -240,7 +240,7 @@ that the constant is `skillfs.go`'s.
 rule only polices unexported declarations, so exporting something is the one
 guaranteed way to silence it. Each such accessor was a permanent public promise
 bought with a file split. The `Installer` fields that another file
-reads carry a `//declscope:package` instead, which says the same
+reads carry a `//declscope:shared` instead, which says the same
 thing in the source and costs nothing outside the module. `CommandName`,
 `ToolName`, `DefaultScope` and `AgentChoices` stay exported, because an adapter
 in another module really does need them.
