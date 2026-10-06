@@ -31,17 +31,17 @@ type Installer struct {
 	// writer, agent.go renders the agent choices, and project.go searches for
 	// a root when projectRoot is empty. The fields above are install.go's own,
 	// and declscope reports it if one of them is read elsewhere.
-	//declscope:package
+	//declscope:shared
 	set *SkillSet
-	//declscope:package
+	//declscope:shared
 	agents []Agent
-	//declscope:package
+	//declscope:shared
 	defaultAgent []AgentSelector
-	//declscope:package
+	//declscope:shared
 	projectRoot string
-	//declscope:package
+	//declscope:shared
 	out io.Writer
-	//declscope:package
+	//declscope:shared
 	errOut io.Writer
 }
 
