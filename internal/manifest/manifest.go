@@ -47,6 +47,31 @@ type block struct {
 	after int
 }
 
+func locate(src []byte) block {
+	rest := bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF}) // tolerate a BOM
+	offset := len(src) - len(rest)
+
+	line, next := readLine(rest, 0)
+	if !isDelim(line) {
+		return block{}
+	}
+	start := next
+	for pos := next; pos < len(rest); {
+		line, closed := readLine(rest, pos)
+		if isDelim(line) {
+			return block{
+				found: true,
+				open:  offset,
+				start: offset + start,
+				end:   offset + pos,
+				after: offset + closed,
+			}
+		}
+		pos = closed
+	}
+	return block{}
+}
+
 // Fields reads the top level `key: value` scalars. Nested mappings, sequences
 // and block scalars are skipped rather than misread.
 func Fields(src []byte) map[string]string {
@@ -198,31 +223,6 @@ func isInjected(line []byte) bool {
 	}
 	key = strings.TrimSpace(key)
 	return slices.Contains(injectedKeys, key)
-}
-
-func locate(src []byte) block {
-	rest := bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF}) // tolerate a BOM
-	offset := len(src) - len(rest)
-
-	line, next := readLine(rest, 0)
-	if !isDelim(line) {
-		return block{}
-	}
-	start := next
-	for pos := next; pos < len(rest); {
-		line, closed := readLine(rest, pos)
-		if isDelim(line) {
-			return block{
-				found: true,
-				open:  offset,
-				start: offset + start,
-				end:   offset + pos,
-				after: offset + closed,
-			}
-		}
-		pos = closed
-	}
-	return block{}
 }
 
 func isDelim(line []byte) bool {
