@@ -175,18 +175,6 @@ func (s cliScope) Set(v string) error {
 	return nil
 }
 
-// bindCLIFlags registers the flags `gh skill install` defines, so the two read
-// the same way.
-func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
-	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
-		in.AgentChoices(), strings.Join(cliSelectorNames(in.defaultAgent), ",")))
-	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
-	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
-	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
-	fs.BoolVar(&o.Force, "f", false, "Overwrite existing skills (shorthand)")
-	fs.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
-}
-
 // newCLIFlagSet builds the FlagSet for one subcommand, already bound and
 // already knowing how to print itself.
 //
@@ -200,6 +188,18 @@ func (in *Installer) newCLIFlagSet(sub string, o *InstallOptions) *flag.FlagSet 
 	fs.Usage = func() {}
 	in.bindCLIFlags(fs, o)
 	return fs
+}
+
+// bindCLIFlags registers the flags `gh skill install` defines, so the two read
+// the same way.
+func (in *Installer) bindCLIFlags(fs *flag.FlagSet, o *InstallOptions) {
+	fs.Var(cliRepeatable{&o.Agents}, "agent", fmt.Sprintf("Target agent: %s, or all, or detected (repeatable) (default %q)",
+		in.AgentChoices(), strings.Join(cliSelectorNames(in.defaultAgent), ",")))
+	fs.StringVar(&o.Dir, "dir", "", "Install to a custom directory (overrides -agent and -scope)")
+	fs.Var(cliScope{&o.Scope}, "scope", "Installation scope: {project|user}")
+	fs.BoolVar(&o.Force, "force", false, "Overwrite existing skills")
+	fs.BoolVar(&o.Force, "f", false, "Overwrite existing skills (shorthand)")
+	fs.BoolVar(&o.DryRun, "dry-run", false, "Report what would happen without writing")
 }
 
 func (in *Installer) parseCLIOptions(sub string, args []string) (InstallOptions, error) {

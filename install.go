@@ -19,18 +19,11 @@ import (
 
 // Installer installs embedded skills into agent directories.
 type Installer struct {
-	toolName     string
-	version      string
-	commandName  string
-	defaultScope Scope
-	metadata     bool
-	executable   func(name string, data []byte) bool
-	now          func() time.Time
-
 	// What another file reads. cli.go and usage.go build help and choose a
 	// writer, agent.go renders the agent choices, and project.go searches for
-	// a root when projectRoot is empty. The fields above are install.go's own,
-	// and declscope reports it if one of them is read elsewhere.
+	// a root when projectRoot is empty. The unmarked fields after them are
+	// install.go's own, and declscope reports it if one of them is read
+	// elsewhere.
 	//declscope:shared
 	set *SkillSet
 	//declscope:shared
@@ -43,6 +36,14 @@ type Installer struct {
 	out io.Writer
 	//declscope:shared
 	errOut io.Writer
+
+	toolName     string
+	version      string
+	commandName  string
+	defaultScope Scope
+	metadata     bool
+	executable   func(name string, data []byte) bool
+	now          func() time.Time
 }
 
 // InstallerOption configures an Installer.
