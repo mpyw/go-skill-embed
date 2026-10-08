@@ -47,45 +47,6 @@ type block struct {
 	after int
 }
 
-func locate(src []byte) block {
-	rest := bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF}) // tolerate a BOM
-	offset := len(src) - len(rest)
-
-	line, next := readLine(rest, 0)
-	if !isDelim(line) {
-		return block{}
-	}
-	start := next
-	for pos := next; pos < len(rest); {
-		line, closed := readLine(rest, pos)
-		if isDelim(line) {
-			return block{
-				found: true,
-				open:  offset,
-				start: offset + start,
-				end:   offset + pos,
-				after: offset + closed,
-			}
-		}
-		pos = closed
-	}
-	return block{}
-}
-
-func isDelim(line []byte) bool {
-	return bytes.Equal(bytes.TrimRight(line, " \t\r"), delim)
-}
-
-// readLine returns the line starting at pos, without its newline, and the
-// offset of the line after it.
-func readLine(src []byte, pos int) (line []byte, next int) {
-	i := bytes.IndexByte(src[pos:], '\n')
-	if i < 0 {
-		return src[pos:], len(src)
-	}
-	return src[pos : pos+i], pos + i + 1
-}
-
 // Fields reads the top level `key: value` scalars. Nested mappings, sequences
 // and block scalars are skipped rather than misread.
 func Fields(src []byte) map[string]string {
@@ -127,17 +88,6 @@ func unquote(s string) string {
 	return s
 }
 
-// quote wraps a value in double quotes when plain style would be ambiguous.
-func quote(s string) string {
-	if s == "" {
-		return `""`
-	}
-	if strings.ContainsAny(s, ":#\n\"'{}[],&*?|<>=!%@`") || s != strings.TrimSpace(s) {
-		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(s) + `"`
-	}
-	return s
-}
-
 // With returns src with the injected keys replaced by entries. A manifest
 // without frontmatter gains one.
 func With(src []byte, entries []Entry) []byte {
@@ -170,6 +120,17 @@ func With(src []byte, entries []Entry) []byte {
 	out.Write(added.Bytes())
 	out.Write(src[b.end:])
 	return out.Bytes()
+}
+
+// quote wraps a value in double quotes when plain style would be ambiguous.
+func quote(s string) string {
+	if s == "" {
+		return `""`
+	}
+	if strings.ContainsAny(s, ":#\n\"'{}[],&*?|<>=!%@`") || s != strings.TrimSpace(s) {
+		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(s) + `"`
+	}
+	return s
 }
 
 // Normalize returns the bytes two manifests must agree on to be the same
@@ -237,4 +198,43 @@ func isInjected(line []byte) bool {
 	}
 	key = strings.TrimSpace(key)
 	return slices.Contains(injectedKeys, key)
+}
+
+func locate(src []byte) block {
+	rest := bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF}) // tolerate a BOM
+	offset := len(src) - len(rest)
+
+	line, next := readLine(rest, 0)
+	if !isDelim(line) {
+		return block{}
+	}
+	start := next
+	for pos := next; pos < len(rest); {
+		line, closed := readLine(rest, pos)
+		if isDelim(line) {
+			return block{
+				found: true,
+				open:  offset,
+				start: offset + start,
+				end:   offset + pos,
+				after: offset + closed,
+			}
+		}
+		pos = closed
+	}
+	return block{}
+}
+
+func isDelim(line []byte) bool {
+	return bytes.Equal(bytes.TrimRight(line, " \t\r"), delim)
+}
+
+// readLine returns the line starting at pos, without its newline, and the
+// offset of the line after it.
+func readLine(src []byte, pos int) (line []byte, next int) {
+	i := bytes.IndexByte(src[pos:], '\n')
+	if i < 0 {
+		return src[pos:], len(src)
+	}
+	return src[pos : pos+i], pos + i + 1
 }
